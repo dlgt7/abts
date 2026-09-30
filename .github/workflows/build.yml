@@ -1,54 +1,108 @@
-name: Android Build
+name: Build APK
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
+    inputs:
+      make_release:
+        description: '是否创建 GitHub Release（仅 tag 触发时有效）'
+        required: false
+        default: 'true'
+
+env:
+  FLUTTER_VERSION: '3.38.x'
+  JAVA_VERSION: '17'
 
 jobs:
   build:
+    name: Build Android APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Setup JDK
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: ${{ env.JAVA_VERSION }}
 
-      - name: Set up Flutter
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
-      - name: Resolve dependencies
+      - name: Flutter doctor
+        run: flutter doctor -v
+
+      - name: Pub get
         run: flutter pub get
 
-      - name: Restore release keystore
-        if: ${{ env.KEYSTORE_BASE64 != '' }}
+      - name: Configure signing
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          echo "$KEYSTORE_BASE64" | base64 -d > android/app/abts-release.jks
-          cat > android/key.properties <<EOF
-          storeFile=abts-release.jks
-          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
-          keyAlias=${{ secrets.KEY_ALIAS }}
-          keyPassword=${{ secrets.KEY_PASSWORD }}
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/app/abitingshu.keystore
+            cat > android/key.properties <<EOF
+          storePassword=$KEYSTORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=abitingshu.keystore
           EOF
+            echo "已配置 release 签名"
+          else
+            echo "未提供签名 Secrets，将回退 debug 签名"
+          fi
 
-      - name: Build release APK
+      - name: Read version
+        id: ver
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d '+' -f 1)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "应用版本: $VERSION"
+
+      - name: Build split APKs
+        run: flutter build apk --release --split-per-abi
+
+      - name: Build universal APK
         run: flutter build apk --release
 
-      - name: Collect APK
+      - name: Rename APKs
+        id: apks
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
         run: |
-          mkdir -p apk
-          find build/app/outputs -name "*.apk" -exec cp {} apk/ \;
+          SRC=build/app/outputs/flutter-apk
+          DIST=dist
+          mkdir -p "$DIST"
+          cp "$SRC/app-arm64-v8a-release.apk"       "$DIST/abts-v${VERSION}-arm64-v8a.apk"
+          cp "$SRC/app-armeabi-v7a-release.apk"     "$DIST/abts-v${VERSION}-armeabi-v7a.apk"
+          cp "$SRC/app-x86_64-release.apk"          "$DIST/abts-v${VERSION}-x86_64.apk"
+          cp "$SRC/app-release.apk"                 "$DIST/abts-v${VERSION}-universal.apk"
+          ls -lh "$DIST"
 
-      - name: Upload APK to Artifact
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: abts-apk
-          path: apk/*
+          name: abts-apks
+          path: dist/*.apk
+          retention-days: 30
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: dist/*.apk
