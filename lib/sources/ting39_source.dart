@@ -448,7 +448,7 @@ class Ting39Source implements BookSource {
 
   String? _pickAudioUrl(String playerHtml) {
     final nameMatch =
-        RegExp(r'\b(url\d*)\s*=\s*[\'"](https?://[^\'"]*)').firstMatch(playerHtml);
+        RegExp(r"\b(url\d*)\s*=\s*[\x27\x22](https?://[^\x27\x22]*)").firstMatch(playerHtml);
     if (nameMatch == null) {
       return RegExp(r"\bmp3\s*:\s*'(https?://[^']*)'")
           .firstMatch(playerHtml)
@@ -457,14 +457,14 @@ class Ting39Source implements BookSource {
     final name = nameMatch.group(1)!;
     var url = nameMatch.group(2)!;
     final suffixMatch =
-        RegExp(r'\b$url\s*\+\s*[\'"]([^\'"]*)[\'"]').firstMatch(playerHtml);
+        RegExp(r"\b$url\s*\+\s*[\x27\x22]([^\x27\x22]*)[\x27\x22]").firstMatch(playerHtml);
     if (suffixMatch != null) {
       url += suffixMatch.group(1)!;
     } else {
       final path = url.split('?')[0].split('#')[0];
       if (!RegExp(r'\.(mp3|m4a|aac|m4s|wav)$', caseSensitive: false).hasMatch(path)) {
         if (url.indexOf('?') < 0) {
-          final murlMatch = RegExp(r'\bmurl\d*\s*=\s*[\'"]([^\'"]*)[\'"]').firstMatch(playerHtml);
+          final murlMatch = RegExp(r"\bmurl\d*\s*=\s*[\x27\x22]([^\x27\x22]*)[\x27\x22]").firstMatch(playerHtml);
           url += murlMatch?.group(1) ?? '';
         }
       }

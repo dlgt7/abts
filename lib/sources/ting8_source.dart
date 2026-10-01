@@ -78,7 +78,7 @@ class Ting8Source implements BookSource {
       final res = await _dio.get(
         '$_base/search.php',
         queryParameters: {'searchword': kw},
-        options: Options(headers: _headers(_base)),
+        options: Options(headers: _headers(referer: _base)),
       );
       final html = res.data.toString();
       if (html.contains('安全验证') || html.contains('验证码')) {
@@ -97,7 +97,7 @@ class Ting8Source implements BookSource {
         : '$_base/books/$catId-$page.html';
     final res = await _dio.get(
       url,
-      options: Options(headers: _headers(url)),
+      options: Options(headers: _headers(referer: url)),
     );
     return _parseCategoryList(res.data.toString());
   }
@@ -146,7 +146,7 @@ class Ting8Source implements BookSource {
   Future<Book> detail(String sourceBookId) async {
     final res = await _dio.get(
       '$_base/mp3/$sourceBookId.html',
-      options: Options(headers: _headers('$_base/books/1.html')),
+      options: Options(headers: _headers(referer: '$_base/books/1.html')),
     );
     final html = res.data.toString();
 
@@ -207,7 +207,7 @@ class Ting8Source implements BookSource {
   Future<List<String>> audioUrls(String sourceBookId, int chapterId) async {
     final res = await _dio.get(
       '$_base/play/$sourceBookId-0-$chapterId.html',
-      options: Options(headers: _headers('$_base/mp3/$sourceBookId.html')),
+      options: Options(headers: _headers(referer: '$_base/mp3/$sourceBookId.html')),
     );
     final html = res.data.toString();
     final audioMatch = RegExp(r'var now="([^"]+)"').firstMatch(html);
