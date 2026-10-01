@@ -7,6 +7,8 @@ import 'package:media_kit/media_kit.dart';
 import 'package:provider/provider.dart';
 
 import 'core/network/bili_client.dart';
+import 'core/source/source_manager.dart';
+import 'core/source/source_store.dart';
 import 'core/storage/search_history_store.dart';
 import 'core/storage/shelf_store.dart';
 import 'core/theme/app_theme.dart';
@@ -17,6 +19,8 @@ import 'player/bili_audio_handler.dart';
 import 'player/book_player.dart';
 import 'services/auth_store.dart';
 import 'services/umeng_analytics.dart';
+import 'sources/bili_source.dart';
+import 'sources/ting8_source.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,6 +36,9 @@ Future<void> main() async {
 /// 全部为本地操作（SharedPreferences / 播放器 / 媒体服务），不做任何网络
 /// 请求；整体 6 秒超时兜底，任何一项异常都不会把用户卡在启动页。
 Future<void> _bootstrap() async {
+  SourceManager.instance
+    ..register(BiliSource())
+    ..register(Ting8Source());
   try {
     await Future.wait([
       BiliClient.instance.initLocal(),
@@ -39,6 +46,7 @@ Future<void> _bootstrap() async {
       ThemeController.instance.load(),
       SearchHistoryStore.instance.load(),
       LoginStore.instance.load(),
+      SourceStore.instance.load(),
     ]).timeout(const Duration(seconds: 6));
   } catch (e) {
     debugPrint('[main] local init failed: $e');
@@ -128,6 +136,7 @@ class _AbTingShuAppState extends State<AbTingShuApp>
         ChangeNotifierProvider.value(value: BookPlayer.instance),
         ChangeNotifierProvider.value(value: LoginStore.instance),
         ChangeNotifierProvider.value(value: SearchHistoryStore.instance),
+        ChangeNotifierProvider.value(value: SourceStore.instance),
       ],
       child: AnimatedBuilder(
         animation: tc,
