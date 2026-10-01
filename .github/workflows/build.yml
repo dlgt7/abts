@@ -52,12 +52,12 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > android/app/abitingge.keystore
+            echo "$KEYSTORE_BASE64" | base64 -d > android/app/abitingshu.keystore
             cat > android/key.properties <<EOF
           storePassword=$KEYSTORE_PASSWORD
           keyPassword=$KEY_PASSWORD
           keyAlias=$KEY_ALIAS
-          storeFile=abitingge.keystore
+          storeFile=abitingshu.keystore
           EOF
             echo "已配置 release 签名"
           else
