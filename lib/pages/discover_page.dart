@@ -19,24 +19,40 @@ class DiscoverPage extends StatefulWidget {
 
 class _DiscoverPageState extends State<DiscoverPage> {
   final _controller = TextEditingController();
+  final _scrollController = ScrollController();
 
   String _lastSourceId = '';
   int _cat = 0;
   bool _browseLoading = true;
+  bool _browseLoadingMore = false;
+  bool _browseNoMore = false;
+  int _browsePage = 1;
   String? _browseError;
   List<Book> _browseBooks = [];
-  final Map<int, List<Book>> _browseCache = {};
+  final Map<int, ({List<Book> books, int page, bool noMore})> _browseCache = {};
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     _loadBrowse();
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final max = _scrollController.position.maxScrollExtent;
+    final pos = _scrollController.position.pixels;
+    if (max - pos < 300 && !_browseLoadingMore && !_browseNoMore && !_browseLoading) {
+      _loadMoreBrowse();
+    }
   }
 
   @override
@@ -75,16 +91,21 @@ class _DiscoverPageState extends State<DiscoverPage> {
 
   Future<void> _loadBrowse({bool force = false}) async {
     if (!force && _browseCache.containsKey(_cat)) {
+      final cached = _browseCache[_cat]!;
       setState(() {
-        _browseBooks = _browseCache[_cat]!;
+        _browseBooks = cached.books;
         _browseLoading = false;
         _browseError = null;
+        _browsePage = cached.page;
+        _browseNoMore = cached.noMore;
       });
       return;
     }
     setState(() {
       _browseLoading = true;
       _browseError = null;
+      _browsePage = 1;
+      _browseNoMore = false;
     });
     try {
       if (_isBili) {
@@ -94,20 +115,23 @@ class _DiscoverPageState extends State<DiscoverPage> {
       final List<Book> list;
       if (_cat == 0) {
         list = await source.hot();
+        _browseNoMore = true;
       } else if (_isBili) {
         final cat = DiscoverSeeds.categories[_cat];
         list = await source.search(cat.keyword);
+        _browseNoMore = true;
       } else {
         final cats = source.categories;
         final idx = _cat - 1;
         list = idx < cats.length
             ? await source.category(cats[idx].id)
             : <Book>[];
+        if (list.isEmpty) _browseNoMore = true;
       }
       if (!mounted) return;
       setState(() {
         _browseBooks = list;
-        _browseCache[_cat] = list;
+        _browseCache[_cat] = (books: list, page: 1, noMore: _browseNoMore);
         _browseLoading = false;
       });
     } catch (e) {
@@ -116,6 +140,38 @@ class _DiscoverPageState extends State<DiscoverPage> {
         _browseLoading = false;
         _browseError = '$e';
       });
+    }
+  }
+
+  Future<void> _loadMoreBrowse() async {
+    if (_isBili || _cat == 0 || _browseNoMore) return;
+    final source = SourceManager.instance.current;
+    final cats = source.categories;
+    final idx = _cat - 1;
+    if (idx >= cats.length) return;
+    setState(() => _browseLoadingMore = true);
+    try {
+      final nextPage = _browsePage + 1;
+      final list = await source.category(cats[idx].id, page: nextPage);
+      if (!mounted) return;
+      if (list.isEmpty) {
+        setState(() {
+          _browseLoadingMore = false;
+          _browseNoMore = true;
+          _browseCache[_cat] = (books: _browseBooks, page: _browsePage, noMore: true);
+        });
+        return;
+      }
+      setState(() {
+        _browsePage = nextPage;
+        _browseBooks = [..._browseBooks, ...list];
+        _browseCache[_cat] = (books: _browseBooks, page: nextPage, noMore: list.length < 12);
+        _browseLoadingMore = false;
+        if (list.length < 12) _browseNoMore = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _browseLoadingMore = false);
     }
   }
 
@@ -241,6 +297,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
             onRefresh: () => _loadBrowse(force: true),
             color: AppTheme.accent,
             child: ListView(
+              controller: _scrollController,
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 32),
               children: _buildBrowseChildren(),
@@ -286,6 +343,37 @@ class _DiscoverPageState extends State<DiscoverPage> {
         )
       else if (_browseBooks.isNotEmpty)
         ..._buildRealResults(),
+      if (_browseLoadingMore)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 16),
+          child: Center(
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+        )
+      else if (!_browseNoMore && _browseBooks.isNotEmpty && !_isBili && _cat > 0)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Center(
+            child: Text(
+              '上拉加载更多',
+              style: TextStyle(fontSize: 12, color: AppTheme.textHint),
+            ),
+          ),
+        ),
+      if (_browseNoMore && _browseBooks.isNotEmpty && !_isBili && _cat > 0)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Center(
+            child: Text(
+              '没有更多了',
+              style: TextStyle(fontSize: 12, color: AppTheme.textHint),
+            ),
+          ),
+        ),
       if (_isBili && _cat < DiscoverSeeds.categories.length)
         ..._buildAnchorsSection(DiscoverSeeds.categories[_cat]),
     ];
