@@ -27,10 +27,6 @@ class Ting39Source implements BookSource {
     connectTimeout: const Duration(seconds: 15),
     receiveTimeout: const Duration(seconds: 30),
     responseType: ResponseType.plain,
-    headers: {
-      'User-Agent': _ua,
-      'Referer': _base,
-    },
   ));
 
   String? _cookie;
@@ -78,8 +74,9 @@ class Ting39Source implements BookSource {
     );
   }
 
-  Map<String, String> _headers() => {
+  Map<String, String> _headers({String? referer}) => {
         'User-Agent': _ua,
+        'Referer': referer ?? _base,
         if (_cookie != null && _cookieCaptured)
           'Cookie': 'pt_guid=${_encodeCookie(_cookie!)}',
       };
@@ -110,12 +107,7 @@ class Ting39Source implements BookSource {
 
   Future<String> _fetch(String url, {String? referer}) async {
     final opts = Options(
-      headers: {
-        'User-Agent': _ua,
-        'Referer': referer ?? _base,
-        if (_cookie != null && _cookieCaptured)
-          'Cookie': 'pt_guid=${_encodeCookie(_cookie!)}',
-      },
+      headers: _headers(referer: referer),
       responseType: ResponseType.plain,
     );
     final res = await _dio.get(url, options: opts);
@@ -204,7 +196,7 @@ class Ting39Source implements BookSource {
     final res = await _dio.get(
       '$_base/top/allvisit.html',
       options: Options(
-        headers: {'User-Agent': _ua, 'Referer': _base},
+        headers: _headers(referer: _base),
         responseType: ResponseType.plain,
       ),
     );
@@ -307,10 +299,33 @@ class Ting39Source implements BookSource {
 
     if (dirPath != null) {
       final dirHtml = await _fetchWithCookie(
-        '$_base$dirPath',
+        '$_base$dirPath?page=1&sort=asc',
         referer: '$_base/book/$sourceBookId.html',
       );
       chapters.addAll(_parseChapters(dirHtml, sourceBookId));
+      int? totalPages;
+      final pageLinks = RegExp(r'href="[^"]*page=(\d+)')
+          .allMatches(dirHtml)
+          .map((m) => int.tryParse(m.group(1)!) ?? 0)
+          .toList();
+      if (pageLinks.isNotEmpty) {
+        totalPages = pageLinks.reduce((a, b) => a > b ? a : b);
+      }
+      if (totalPages == null || totalPages < 1) totalPages = 1;
+      if (totalPages > 1) {
+        for (var p = 2; p <= totalPages; p++) {
+          try {
+            final pageHtml = await _fetchWithCookie(
+              '$_base$dirPath?page=$p&sort=asc',
+              referer: '$_base/book/$sourceBookId.html',
+            );
+            if (pageHtml.contains('ptcms_guard_retry')) break;
+            chapters.addAll(_parseChapters(pageHtml, sourceBookId));
+          } catch (_) {
+            break;
+          }
+        }
+      }
     }
 
     if (chapters.isEmpty) {
@@ -335,12 +350,7 @@ class Ting39Source implements BookSource {
 
   Future<String> _fetchWithCookie(String url, {String? referer}) async {
     final opts = Options(
-      headers: {
-        'User-Agent': _ua,
-        'Referer': referer ?? _base,
-        if (_cookie != null && _cookieCaptured)
-          'Cookie': 'pt_guid=${_encodeCookie(_cookie!)}',
-      },
+      headers: _headers(referer: referer),
       responseType: ResponseType.plain,
     );
     var res = await _dio.get(url, options: opts);
@@ -397,16 +407,26 @@ class Ting39Source implements BookSource {
       referer: '$_base/book/$sourceBookId.html',
     );
 
+    final playerIframe =
+        RegExp(r'iframe#play[^>]*src="([^"]+)"').firstMatch(html);
+    if (playerIframe != null) {
+      final playerUrl = playerIframe.group(1)!;
+      final playerHtml = await _fetchWithCookie(
+        playerUrl.startsWith('http') ? playerUrl : '$_base$playerUrl',
+        referer: url,
+      );
+      final urlVar = _pickAudioUrl(playerHtml);
+      if (urlVar != null && urlVar.isNotEmpty) {
+        return [urlVar];
+      }
+    }
+
     final directAudio = RegExp(
       r'https?://[^\s\x22\x27<>]+\.(mp3|m4a|wav|ogg|flac)',
       caseSensitive: false,
     ).firstMatch(html);
     if (directAudio != null) {
       return [directAudio.group(0)!];
-    }
-
-    if (html.contains('ptcms_guard_retry') || html.contains('var reversed')) {
-      throw Exception('幻听网播放页受防爬保护，无法获取音频');
     }
 
     final audioTagMatch =
@@ -424,6 +444,32 @@ class Ting39Source implements BookSource {
     }
 
     throw Exception('未找到幻听网音频地址');
+  }
+
+  String? _pickAudioUrl(String playerHtml) {
+    final nameMatch =
+        RegExp(r'\b(url\d*)\s*=\s*[\'"](https?://[^\'"]*)').firstMatch(playerHtml);
+    if (nameMatch == null) {
+      return RegExp(r"\bmp3\s*:\s*'(https?://[^']*)'")
+          .firstMatch(playerHtml)
+          ?.group(1);
+    }
+    final name = nameMatch.group(1)!;
+    var url = nameMatch.group(2)!;
+    final suffixMatch =
+        RegExp(r'\b$url\s*\+\s*[\'"]([^\'"]*)[\'"]').firstMatch(playerHtml);
+    if (suffixMatch != null) {
+      url += suffixMatch.group(1)!;
+    } else {
+      final path = url.split('?')[0].split('#')[0];
+      if (!RegExp(r'\.(mp3|m4a|aac|m4s|wav)$', caseSensitive: false).hasMatch(path)) {
+        if (url.indexOf('?') < 0) {
+          final murlMatch = RegExp(r'\bmurl\d*\s*=\s*[\'"]([^\'"]*)[\'"]').firstMatch(playerHtml);
+          url += murlMatch?.group(1) ?? '';
+        }
+      }
+    }
+    return url.isEmpty ? null : url;
   }
 
   static String _stripHtmlTags(String input) {

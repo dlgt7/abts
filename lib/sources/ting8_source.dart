@@ -25,11 +25,12 @@ class Ting8Source implements BookSource {
     connectTimeout: const Duration(seconds: 12),
     receiveTimeout: const Duration(seconds: 30),
     responseType: ResponseType.plain,
-    headers: {
-      'User-Agent': _ua,
-      'Referer': _base,
-    },
   ));
+
+  Map<String, String> _headers({String? referer}) => {
+        'User-Agent': _ua,
+        'Referer': referer ?? _base,
+      };
 
   @override
   List<SourceCategory> get categories => const [
@@ -73,9 +74,11 @@ class Ting8Source implements BookSource {
     final kw = keyword.trim();
     if (kw.isEmpty) return [];
     try {
+      await _dio.get(_base, options: Options(headers: _headers()));
       final res = await _dio.get(
         '$_base/search.php',
         queryParameters: {'searchword': kw},
+        options: Options(headers: _headers(_base)),
       );
       final html = res.data.toString();
       if (html.contains('安全验证') || html.contains('验证码')) {
@@ -92,7 +95,10 @@ class Ting8Source implements BookSource {
     final url = page <= 1
         ? '$_base/books/$catId.html'
         : '$_base/books/$catId-$page.html';
-    final res = await _dio.get(url);
+    final res = await _dio.get(
+      url,
+      options: Options(headers: _headers(url)),
+    );
     return _parseCategoryList(res.data.toString());
   }
 
@@ -113,9 +119,10 @@ class Ting8Source implements BookSource {
 
   List<Book> _parseCategoryList(String html) {
     final books = <Book>[];
-    final blockRegex = RegExp(
-      r'<div class="style-img[^"]*"[^>]*>\s*'
-      r'<a[^>]*class="img-80[^"]*"[^>]*>\s*'
+    final liRegex = RegExp(
+      r'<li[^>]*>\s*'
+      r'<div[^>]*class="style-img[^"]*"[^>]*>\s*'
+      r'<a[^>]*class="img-80[^"]*"[^>]*href="(/mp3/(\d+)\.html)"[^>]*>\s*'
       r'<span[^>]*>\s*'
       r'<img src="([^"]+)"[^>]*>\s*</span>\s*</a>\s*'
       r'<section>\s*'
@@ -124,43 +131,23 @@ class Ting8Source implements BookSource {
       r'<a[^>]*class="f-bold"[^>]*>([^<]+)</a>',
       dotAll: true,
     );
-    for (final m in blockRegex.allMatches(html)) {
-      final pic = m.group(1)!;
-      final author = m.group(2)!.trim();
-      final title = m.group(3)!.trim();
-      final idMatch = RegExp(r'href="/mp3/(\d+)\.html"').firstMatch(pic.isEmpty ? '' : html);
-      final bookMatch = RegExp(r'<a[^>]*href="/mp3/(\d+)\.html"[^>]*class="img-80').firstMatch(html);
-      final id = bookMatch?.group(1) ?? '';
+    for (final m in liRegex.allMatches(html)) {
+      final id = m.group(2)!;
+      final pic = m.group(3)!.trim();
+      final author = m.group(4)!.trim();
+      final title = m.group(5)!.trim();
       if (title.isEmpty || id.isEmpty) continue;
       books.add(_bookFromId(id, title, pic, author));
-    }
-    if (books.isEmpty) {
-      final itemRegex = RegExp(
-        r'href="/mp3/(\d+)\.html"[^>]*class="img-80[^"]*"[^>]*>.*?'
-        r'<img src="([^"]+)"[^>]*>.*?'
-        r'<a[^>]*class="f-bold"[^>]*>([^<]+)</a>',
-        dotAll: true,
-      );
-      final seen = <String>{};
-      for (final m in itemRegex.allMatches(html)) {
-        final id = m.group(1)!;
-        final pic = m.group(2)!;
-        final title = m.group(3)!.trim();
-        if (title.isEmpty || !seen.add(id)) continue;
-        final authorRegex = RegExp(
-          r'href="/mp3/$id\.html"[^>]*class="img-80[^"]*"[^>]*>.*?<section>.*?<span[^>]*>\s*<i[^>]*></i>\s*([^<]+)',
-          dotAll: true,
-        ).firstMatch(html);
-        final author = authorRegex?.group(1)?.trim() ?? '';
-        books.add(_bookFromId(id, title, pic, author));
-      }
     }
     return books;
   }
 
   @override
   Future<Book> detail(String sourceBookId) async {
-    final res = await _dio.get('$_base/mp3/$sourceBookId.html');
+    final res = await _dio.get(
+      '$_base/mp3/$sourceBookId.html',
+      options: Options(headers: _headers('$_base/books/1.html')),
+    );
     final html = res.data.toString();
 
     final titleMatch =
@@ -220,6 +207,7 @@ class Ting8Source implements BookSource {
   Future<List<String>> audioUrls(String sourceBookId, int chapterId) async {
     final res = await _dio.get(
       '$_base/play/$sourceBookId-0-$chapterId.html',
+      options: Options(headers: _headers('$_base/mp3/$sourceBookId.html')),
     );
     final html = res.data.toString();
     final audioMatch = RegExp(r'var now="([^"]+)"').firstMatch(html);

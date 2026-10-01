@@ -27,10 +27,6 @@ class Ting15Source implements BookSource {
     connectTimeout: const Duration(seconds: 15),
     receiveTimeout: const Duration(seconds: 30),
     responseType: ResponseType.plain,
-    headers: {
-      'User-Agent': _ua,
-      'Referer': _base,
-    },
   ));
 
   @override
@@ -49,7 +45,8 @@ class Ting15Source implements BookSource {
 
   String _bookKey(String cat, String id) => '$_sourceId:$cat/$id';
 
-  Book _bookFromCatId(String cat, String id, String title, String pic, String author, String announcer) {
+  Book _bookFromCatId(String cat, String id, String title, String pic,
+      String author, String announcer) {
     return Book(
       bvid: _bookKey(cat, id),
       aid: 0,
@@ -62,7 +59,7 @@ class Ting15Source implements BookSource {
     );
   }
 
-  Map<String, String> _h(String referer) => {
+  Map<String, String> _headers({String referer = ''}) => {
         'User-Agent': _ua,
         'Referer': referer.isEmpty ? _base : referer,
       };
@@ -71,10 +68,21 @@ class Ting15Source implements BookSource {
   Future<List<Book>> search(String keyword, {int page = 1, int pageSize = 20}) async {
     final kw = keyword.trim();
     if (kw.isEmpty) return [];
-    final url = '$_base/?s=ting-search-wd-$kw.html';
-    final res = await _dio.get(url, options: Options(headers: _h(_base)));
-    final html = res.data.toString();
-    return _parseBookList(html);
+    try {
+      final res = await _dio.post(
+        '$_base/?s=ting-search',
+        data: {'wd': kw},
+        options: Options(
+          headers: {
+            ..._headers(),
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        ),
+      );
+      return _parseBookList(res.data.toString());
+    } on DioException catch (_) {
+      throw Exception('搜索失败，请检查网络');
+    }
   }
 
   @override
@@ -82,67 +90,58 @@ class Ting15Source implements BookSource {
     final baseUrl = '$_base/$catId/';
     final url = page <= 1
         ? baseUrl
-        : baseUrl.replaceFirst(RegExp(r'/\$'), '/index$page.html');
-    final res = await _dio.get(url, options: Options(headers: _h(baseUrl)));
-    final html = res.data.toString();
-    return _parseBookList(html);
+        : '$baseUrl/index$page.html';
+    final res = await _dio.get(
+      url,
+      options: Options(headers: _headers(referer: baseUrl)),
+    );
+    return _parseBookList(res.data.toString());
   }
 
   @override
   Future<List<Book>> hot({int limit = 30}) async {
-    final res = await _dio.get(_base, options: Options(headers: _h(_base)));
-    final html = res.data.toString();
-    return _parseBookList(html).take(limit).toList();
+    final res = await _dio.get(
+      '$_base/wuxiaxuanhuan/',
+      options: Options(headers: _headers()),
+    );
+    return _parseBookList(res.data.toString()).take(limit).toList();
   }
 
   List<Book> _parseBookList(String html) {
     final books = <Book>[];
     final liRegex = RegExp(
-      r'<li>\s*<div class="img">\s*<a href="/(\w+)/(\d+)\.html"[^>]*title="([^"]*)"[^>]*>\s*<img[^>]*src="([^"]*)"[^>]*alt="[^"]*"[^>]*>\s*</a>\s*</div>\s*'
-      r'<div class="info">\s*<h4>\s*<a[^>]*href="/\w+/(\d+)\.html"[^>]*title="([^"]*)"[^>]*>\s*'
+      r'<li>\s*'
+      r'<div class="img">\s*'
+      r'<a href="/(\w+)/(\d+)\.html"[^>]*title="([^"]*)"[^>]*>\s*'
+      r'<img[^>]*src="([^"]*)"[^>]*>',
+      dotAll: true,
+    );
+    final infoRegex = RegExp(
+      r'<div class="info">\s*'
+      r'<h4>\s*'
+      r'<a href="/\w+/(\d+)\.html"[^>]*title="[^"]*"[^>]*>\s*'
       r'([^<]+)',
       dotAll: true,
     );
+    final authorRegex = RegExp(r'<p>作者：([^<]+)</p>');
+    final announcerRegex = RegExp(r'<p>播音：([^<]+)</p>');
+
     for (final m in liRegex.allMatches(html)) {
       final cat = m.group(1)!;
       final id = m.group(2)!;
-      final pic = m.group(4) ?? '';
-      final title = (m.group(6) ?? m.group(5) ?? '').trim();
+      final pic = m.group(4)!.trim();
+      final startIdx = m.end;
+      final remaining = html.substring(startIdx);
+      final infoMatch = infoRegex.firstMatch(remaining);
+      if (infoMatch == null) continue;
+      final restAfterInfo = remaining.substring(infoMatch.end);
+      final authorMatch = authorRegex.firstMatch(restAfterInfo);
+      final announcerMatch = announcerRegex.firstMatch(restAfterInfo);
+      final title = (infoMatch.group(2) ?? '').trim();
+      final author = (authorMatch?.group(1) ?? '').trim();
+      final announcer = (announcerMatch?.group(1) ?? '').trim();
       if (title.isEmpty) continue;
-      books.add(_bookFromCatId(cat, id, title, pic, '', ''));
-    }
-
-    if (books.isEmpty) {
-      final itemRegex = RegExp(
-        r'<li>\s*<div class="img">\s*<a href="/(\w+)/(\d+)\.html"[^>]*title="([^"]*)"[^>]*>',
-      );
-      final titleRegex = RegExp(
-        r'<h4>\s*<a[^>]*href="/\w+/(\d+)\.html"[^>]*title="[^"]*"[^>]*>\s*([^<]+)',
-      );
-      final picRegex = RegExp(r'<img[^>]*src="([^"]*)"');
-      final seen = <String>{};
-      for (final m in itemRegex.allMatches(html)) {
-        final cat = m.group(1)!;
-        final id = m.group(2)!;
-        if (!seen.add('$cat/$id')) continue;
-        final titleMatch = titleRegex.firstMatch(html);
-        final picMatch = picRegex.firstMatch(html);
-        final title = titleMatch?.group(2)?.trim() ?? '';
-        if (title.isEmpty) continue;
-        books.add(_bookFromCatId(cat, id, title, picMatch?.group(1) ?? '', '', ''));
-      }
-    }
-
-    if (books.isEmpty) {
-      final simpleRegex = RegExp(r'<a href="/(\w+)/(\d+)\.html"[^>]*title="([^"]*)"[^>]*>');
-      final seen = <String>{};
-      for (final m in simpleRegex.allMatches(html)) {
-        final cat = m.group(1)!;
-        final id = m.group(2)!;
-        final title = m.group(3)!.trim();
-        if (title.isEmpty || !seen.add('$cat/$id')) continue;
-        books.add(_bookFromCatId(cat, id, title, '', '', ''));
-      }
+      books.add(_bookFromCatId(cat, id, title, pic, author, announcer));
     }
     return books;
   }
@@ -155,7 +154,7 @@ class Ting15Source implements BookSource {
 
     final res = await _dio.get(
       '$_base/$cat/$id.html',
-      options: Options(headers: _h('$_base/$cat/')),
+      options: Options(headers: _headers(referer: '$_base/$cat/')),
     );
     var html = res.data.toString();
 
@@ -169,11 +168,12 @@ class Ting15Source implements BookSource {
         RegExp(r'<img[^>]*class="bimg"[^>]*src="([^"]+)"').firstMatch(html);
     final pic = picMatch?.group(1)?.trim() ?? '';
 
-    final authorMatch = RegExp(r'<span class="bz">\[著\]\s*([^<]+?)\s*<').firstMatch(html);
+    final authorMatch = RegExp(r'<p>作者：([^<]+)</p>').firstMatch(html);
     final author = _stripHtml(authorMatch?.group(1) ?? '');
 
     final announcerMatch =
-        RegExp(r'<span class="bys">.*?<a[^>]*>([^<]+?)</a>', dotAll: true).firstMatch(html);
+        RegExp(r'<p>播音：<span class="bys">.*?<a[^>]*>([^<]+?)</a>', dotAll: true)
+            .firstMatch(html);
     final announcer = _stripHtml(announcerMatch?.group(1) ?? '');
 
     final descMatch =
@@ -218,7 +218,7 @@ class Ting15Source implements BookSource {
     final playUrl = '$_base/$cat/$bookId/0-$chapterId.html';
     final res = await _dio.get(
       playUrl,
-      options: Options(headers: _h('$_base/$cat/$bookId.html')),
+      options: Options(headers: _headers(referer: '$_base/$cat/$bookId.html')),
     );
     final html = res.data.toString();
 
@@ -236,7 +236,7 @@ class Ting15Source implements BookSource {
       data: {'bookId': b, 'isPay': p, 'page': cp},
       options: Options(
         headers: {
-          ..._h(playUrl),
+          ..._headers(referer: playUrl),
           'Content-Type': 'application/x-www-form-urlencoded',
           'xt': token,
           'l': l,
