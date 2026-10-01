@@ -94,21 +94,21 @@ jobs:
       - name: Upload arm64-v8a APK
         uses: actions/upload-artifact@v4
         with:
-          name: abtg-arm64-v8a
+          name: abts-arm64-v8a
           path: dist/abts-v${{ steps.ver.outputs.version }}-arm64-v8a.apk
           retention-days: 30
 
       - name: Upload armeabi-v7a APK
         uses: actions/upload-artifact@v4
         with:
-          name: abtg-armeabi-v7a
+          name: abts-armeabi-v7a
           path: dist/abts-v${{ steps.ver.outputs.version }}-armeabi-v7a.apk
           retention-days: 30
 
       - name: Upload x86_64 APK
         uses: actions/upload-artifact@v4
         with:
-          name: abtg-x86_64
+          name: abts-x86_64
           path: dist/abts-v${{ steps.ver.outputs.version }}-x86_64.apk
           retention-days: 30
 
