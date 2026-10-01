@@ -75,16 +75,24 @@ class Ting8Source implements BookSource {
     if (kw.isEmpty) return [];
     try {
       await _dio.get(_base, options: Options(headers: _headers()));
-      final res = await _dio.get(
-        '$_base/search.php',
-        queryParameters: {'searchword': kw},
-        options: Options(headers: _headers(referer: _base)),
-      );
-      final html = res.data.toString();
-      if (html.contains('安全验证') || html.contains('验证码')) {
-        throw Exception('听书吧搜索触发验证码，请稍后再试或使用分类浏览');
+      for (var attempt = 0; attempt < 3; attempt++) {
+        final res = await _dio.get(
+          '$_base/search.php',
+          queryParameters: {'searchword': kw},
+          options: Options(headers: _headers(referer: _base)),
+        );
+        final html = res.data.toString();
+        if (html.contains('安全验证') || html.contains('系统安全验证') ||
+            html.contains('验证码') || html.contains('<title>系统提示')) {
+          if (attempt < 2) {
+            await Future<void>.delayed(const Duration(milliseconds: 500));
+            continue;
+          }
+          throw Exception('听书吧搜索触发安全验证，请用浏览器打开 $_base/search.php?searchword=$kw 完成验证后重试，或使用分类浏览');
+        }
+        return _parseCategoryList(html);
       }
-      return _parseCategoryList(html);
+      return [];
     } on DioException catch (_) {
       throw Exception('搜索失败，请检查网络');
     }

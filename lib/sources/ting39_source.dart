@@ -254,35 +254,46 @@ class Ting39Source implements BookSource {
 
   List<Book> _parseBookList(String html) {
     final books = <Book>[];
+    final seen = <String>{};
     final blockRegex = RegExp(
-      r'<a[^>]*class="thumb"[^>]*href="(/book/(\d+)\.html)"[^>]*>.*?'
+      r'<a[^>]*class="thumb"[^>]*href="/book/(\d+)\.html"[^>]*>.*?'
       r'<img[^>]*data-original="([^"]*)"[^>]*>.*?'
-      r'<dt[^>]*>\s*<span[^>]*>[^<]*</span>\s*'
+      r'<dt[^>]*>\s*(?:<span[^>]*>[^<]*</span>\s*)?'
       r'<a[^>]*href="/book/\d+\.html"[^>]*>([^<]+)</a>',
       dotAll: true,
     );
     for (final m in blockRegex.allMatches(html)) {
-      final id = m.group(2)!;
-      final pic = m.group(3)!.trim();
-      final title = m.group(4)!.trim();
-      if (title.isEmpty) continue;
+      final id = m.group(1)!;
+      final pic = m.group(2)!.trim();
+      final title = m.group(3)!.trim();
+      if (title.isEmpty || !seen.add(id)) continue;
       books.add(_bookFromId(id, title, pic, ''));
     }
     if (books.isEmpty) {
-      final simpleRegex = RegExp(
-        r'<a[^>]*class="thumb"[^>]*href="(/book/(\d+)\.html)"[^>]*>.*?'
-        r'<img[^>]*data-original="([^"]*)"[^>]*>.*?'
-        r'<dt[^>]*>\s*<span[^>]*>[^<]*</span>\s*'
-        r'<a[^>]*>([^<]+)</a>',
+      final titleRegex = RegExp(
+        r'<a[^>]*class="thumb"[^>]*href="/book/(\d+)\.html"[^>]*'
+        r'title="([^"]*)"[^>]*>.*?'
+        r'<img[^>]*data-original="([^"]*)"',
         dotAll: true,
       );
-      final seen = <String>{};
-      for (final m in simpleRegex.allMatches(html)) {
-        final id = m.group(2)!;
+      for (final m in titleRegex.allMatches(html)) {
+        final id = m.group(1)!;
+        final title = m.group(2)!.trim();
         final pic = m.group(3)!.trim();
-        final title = m.group(4)!.trim();
         if (title.isEmpty || !seen.add(id)) continue;
         books.add(_bookFromId(id, title, pic, ''));
+      }
+    }
+    if (books.isEmpty) {
+      final textRegex = RegExp(
+        r'<span[^>]*class="z2[^"]*"[^>]*>\s*'
+        r'<a[^>]*href="/book/(\d+)\.html"[^>]*>([^<]+)</a>',
+      );
+      for (final m in textRegex.allMatches(html)) {
+        final id = m.group(1)!;
+        final title = m.group(2)!.trim();
+        if (title.isEmpty || !seen.add(id)) continue;
+        books.add(_bookFromId(id, title, '', ''));
       }
     }
     return books;
@@ -372,13 +383,13 @@ class Ting39Source implements BookSource {
 
     if (chapters.isEmpty) {
       final playlistRegex = RegExp(
-        r'<div[^>]*id=["\']playlist["\'][^>]*>.*?<ul>(.*?)</ul>.*?</div>',
+        r'<div[^>]*id="playlist"[^>]*>.*?<ul>(.*?)</ul>.*?</div>',
         dotAll: true,
       );
       final playlistMatch = playlistRegex.firstMatch(html);
       if (playlistMatch != null) {
         final liRegex = RegExp(
-          r'href=["\'](/tingshu/\d+/\d+\.html)["\'][^>]*>(.*?)</a>',
+          r'href="(/tingshu/\d+/\d+\.html)"[^>]*>(.*?)</a>',
           dotAll: true,
         );
         for (final m in liRegex.allMatches(playlistMatch.group(1)!)) {
@@ -428,7 +439,7 @@ class Ting39Source implements BookSource {
   List<Chapter> _parseChapters(String html, String sourceBookId) {
     final chapters = <Chapter>[];
     final chapterRegex = RegExp(
-      r'href=["\']/tingshu/${RegExp.escape(sourceBookId)}/(\d+)\.html["\'][^>]*>(.*?)</a>',
+      r'href="/tingshu/${RegExp.escape(sourceBookId)}/(\d+)\.html"[^>]*>(.*?)</a>',
       dotAll: true,
     );
     for (final m in chapterRegex.allMatches(html)) {
@@ -439,13 +450,13 @@ class Ting39Source implements BookSource {
     }
     if (chapters.isEmpty) {
       final playlistRegex = RegExp(
-        r'<div[^>]*id=["\']playlist["\'][^>]*>.*?<ul>(.*?)</ul>.*?</div>',
+        r'<div[^>]*id="playlist"[^>]*>.*?<ul>(.*?)</ul>.*?</div>',
         dotAll: true,
       );
       final playlistMatch = playlistRegex.firstMatch(html);
       if (playlistMatch != null) {
         final liRegex = RegExp(
-          r'href=["\'](/tingshu/\d+/\d+\.html)["\'][^>]*>(.*?)</a>',
+          r'href="(/tingshu/\d+/\d+\.html)"[^>]*>(.*?)</a>',
           dotAll: true,
         );
         for (final m in liRegex.allMatches(playlistMatch.group(1)!)) {
