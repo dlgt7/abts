@@ -85,31 +85,31 @@ jobs:
           SRC=build/app/outputs/flutter-apk
           DIST=dist
           mkdir -p "$DIST"
-          cp "$SRC/app-arm64-v8a-release.apk"       "$DIST/abtg-v${VERSION}-arm64-v8a.apk"
-          cp "$SRC/app-armeabi-v7a-release.apk"     "$DIST/abtg-v${VERSION}-armeabi-v7a.apk"
-          cp "$SRC/app-x86_64-release.apk"          "$DIST/abtg-v${VERSION}-x86_64.apk"
-          cp "$SRC/app-release.apk"                 "$DIST/abtg-v${VERSION}-universal.apk"
+          cp "$SRC/app-arm64-v8a-release.apk"       "$DIST/abts-v${VERSION}-arm64-v8a.apk"
+          cp "$SRC/app-armeabi-v7a-release.apk"     "$DIST/abts-v${VERSION}-armeabi-v7a.apk"
+          cp "$SRC/app-x86_64-release.apk"          "$DIST/abts-v${VERSION}-x86_64.apk"
+          cp "$SRC/app-release.apk"                 "$DIST/abts-v${VERSION}-universal.apk"
           ls -lh "$DIST"
 
       - name: Upload arm64-v8a APK
         uses: actions/upload-artifact@v4
         with:
           name: abtg-arm64-v8a
-          path: dist/abtg-v${{ steps.ver.outputs.version }}-arm64-v8a.apk
+          path: dist/abts-v${{ steps.ver.outputs.version }}-arm64-v8a.apk
           retention-days: 30
 
       - name: Upload armeabi-v7a APK
         uses: actions/upload-artifact@v4
         with:
           name: abtg-armeabi-v7a
-          path: dist/abtg-v${{ steps.ver.outputs.version }}-armeabi-v7a.apk
+          path: dist/abts-v${{ steps.ver.outputs.version }}-armeabi-v7a.apk
           retention-days: 30
 
       - name: Upload x86_64 APK
         uses: actions/upload-artifact@v4
         with:
           name: abtg-x86_64
-          path: dist/abtg-v${{ steps.ver.outputs.version }}-x86_64.apk
+          path: dist/abts-v${{ steps.ver.outputs.version }}-x86_64.apk
           retention-days: 30
 
       - name: Upload artifacts
