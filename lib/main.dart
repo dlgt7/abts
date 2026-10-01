@@ -20,6 +20,7 @@ import 'player/book_player.dart';
 import 'services/auth_store.dart';
 import 'services/umeng_analytics.dart';
 import 'sources/bili_source.dart';
+import 'sources/psmp3_source.dart';
 import 'sources/ting15_source.dart';
 
 
@@ -40,7 +41,7 @@ Future<void> main() async {
 Future<void> _bootstrap() async {
   SourceManager.instance
     ..register(BiliSource())
-
+    ..register(Psmp3Source())
     ..register(Ting15Source());
   try {
     await Future.wait([
