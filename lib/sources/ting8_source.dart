@@ -174,18 +174,24 @@ class Ting8Source implements BookSource {
     final desc = descMatch?.group(1)?.trim() ?? '';
 
     final chapters = <Chapter>[];
-    final chapterRegex = RegExp(
-      r'<a href="/play/\d+-0-(\d+)\.html"[^>]*>([^<]+)</a>',
-      dotAll: true,
-    );
-    for (final m in chapterRegex.allMatches(html)) {
-      final part = int.tryParse(m.group(1)!) ?? 0;
-      final partTitle = m.group(2)!.trim();
-      chapters.add(Chapter(
-        cid: part,
-        page: part + 1,
-        part: partTitle,
-      ));
+    final yueduIdx = html.indexOf('id="yuedu"');
+    if (yueduIdx >= 0) {
+      final yueduEnd = html.indexOf('</ul>', yueduIdx);
+      final yueduSection = html.substring(yueduIdx, yueduEnd >= 0 ? yueduEnd + 2000 : yueduIdx + 5000);
+      final chapterRegex = RegExp(
+        r'<li id="(\d+)"><a[^>]*href="/play/\d+-0-(\d+)\.html"[^>]*title="([^"]*)"',
+        dotAll: true,
+      );
+      for (final m in chapterRegex.allMatches(yueduSection)) {
+        final part = int.tryParse(m.group(2)!) ?? 0;
+        final partTitle = m.group(3)!.trim();
+        if (partTitle.isEmpty || partTitle == '开始收听') continue;
+        chapters.add(Chapter(
+          cid: part,
+          page: part + 1,
+          part: partTitle,
+        ));
+      }
     }
 
     return Book(
