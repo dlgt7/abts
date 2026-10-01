@@ -353,12 +353,35 @@ class BookPlayer extends ChangeNotifier {
 
   /// media_kit 请求流媒体时需要的请求头（否则 B 站 CDN 返回 403/412）
   Map<String, String> _streamHeaders() {
-    if (_book?.sourceId == 'bili') {
+    final sid = _book?.sourceId;
+    if (sid == 'bili') {
       return const {
         'User-Agent': BiliEndpoints.userAgent,
         'Referer': BiliEndpoints.home,
       };
     }
+    if (sid == 'ting15') {
+      return const {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 '
+            'Mobile Safari/537.36',
+        'Referer': 'https://www.ting15.com/',
+      };
+    }
+    if (sid == 'psmp3') {
+      return const {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 12; Mobile) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 '
+            'Mobile Safari/537.36',
+        'Referer': 'https://www.psmp3.com/',
+      };
+    }
+    return const {
+      'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) '
+          'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 '
+          'Mobile Safari/537.36',
+    };
+  }
     return const {
       'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) '
           'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 '
