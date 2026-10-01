@@ -21,7 +21,7 @@ import 'services/auth_store.dart';
 import 'services/umeng_analytics.dart';
 import 'sources/bili_source.dart';
 import 'sources/ting15_source.dart';
-import 'sources/ting39_source.dart';
+
 
 
 Future<void> main() async {
@@ -41,7 +41,6 @@ Future<void> _bootstrap() async {
   SourceManager.instance
     ..register(BiliSource())
 
-    ..register(Ting39Source())
     ..register(Ting15Source());
   try {
     await Future.wait([
