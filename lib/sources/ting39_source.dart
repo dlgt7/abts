@@ -353,7 +353,7 @@ class Ting39Source implements BookSource {
     );
 
     final directAudio = RegExp(
-      r'https?://[^\s"\'<>]+\.(mp3|m4a|wav|ogg|flac)',
+      r'https?://[^\s\x22\x27<>]+\.(mp3|m4a|wav|ogg|flac)',
       caseSensitive: false,
     ).firstMatch(html);
     if (directAudio != null) {
@@ -371,7 +371,7 @@ class Ting39Source implements BookSource {
     }
 
     final m3u8Match = RegExp(
-      r'https?://[^\s"\'<>]+\.m3u8',
+      r'https?://[^\s\x22\x27<>]+\.m3u8',
       caseSensitive: false,
     ).firstMatch(html);
     if (m3u8Match != null) {
