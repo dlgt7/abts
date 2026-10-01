@@ -32,6 +32,12 @@ class BiliSource implements BookSource {
   @override
   Future<List<Book>> hot({int limit = 30}) => _api.rankHotNovel(limit: limit);
 
+  @override
+  List<SourceCategory> get categories => const [];
+
+  @override
+  Future<List<Book>> category(String catId, {int page = 1}) async => [];
+
   static List<String> extractAudioUrls(BookAudio audio) {
     final list = <String>[];
     void add(AudioTrack? t) {
