@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../core/source/source_manager.dart';
+import '../core/source/source_store.dart';
 import '../core/theme/app_theme.dart';
 import '../data/seed_books.dart';
 import '../models/book.dart';
-import '../services/bili_api.dart';
 import '../widgets/book_cards.dart';
 import 'book_detail_page.dart';
 import 'search_page.dart';
 
-/// 发现：分类浏览（热门/广播剧/评书…）+ 搜索入口 + 精选推荐兜底
-/// 搜索跳转到独立搜索页（支持分页）
 class DiscoverPage extends StatefulWidget {
   const DiscoverPage({super.key});
 
@@ -19,9 +19,8 @@ class DiscoverPage extends StatefulWidget {
 
 class _DiscoverPageState extends State<DiscoverPage> {
   final _controller = TextEditingController();
-  final _bili = BiliApi.instance;
 
-  // 分类浏览
+  String _lastSourceId = '';
   int _cat = 0;
   bool _browseLoading = true;
   String? _browseError;
@@ -40,13 +39,40 @@ class _DiscoverPageState extends State<DiscoverPage> {
     super.dispose();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final sourceId = SourceStore.instance.currentId;
+    if (sourceId != _lastSourceId) {
+      _lastSourceId = sourceId;
+      _cat = 0;
+      _browseCache.clear();
+      _loadBrowse();
+    }
+  }
+
+  bool get _isBili => SourceManager.instance.currentId == 'bili';
+
+  List<({String label, IconData icon})> get _catLabels {
+    if (_isBili) {
+      return DiscoverSeeds.categories
+          .map((c) => (label: c.label, icon: c.icon))
+          .toList();
+    }
+    final source = SourceManager.instance.current;
+    return [
+      (label: '热门', icon: Icons.local_fire_department_rounded),
+      ...source.categories
+          .map((c) => (label: c.label, icon: Icons.menu_book_rounded)),
+    ];
+  }
+
   void _switchCategory(int i) {
     if (i == _cat) return;
     setState(() => _cat = i);
     _loadBrowse();
   }
 
-  /// 分类浏览：从 B 站拉取该分类真实内容（带缓存，避免来回切换重复请求触发风控）
   Future<void> _loadBrowse({bool force = false}) async {
     if (!force && _browseCache.containsKey(_cat)) {
       setState(() {
@@ -56,18 +82,28 @@ class _DiscoverPageState extends State<DiscoverPage> {
       });
       return;
     }
-    final cat = DiscoverSeeds.categories[_cat];
     setState(() {
       _browseLoading = true;
       _browseError = null;
     });
     try {
-      // 错开自动请求，降低被风控的概率
-      await Future<void>.delayed(const Duration(milliseconds: 500));
-      // 热门推荐：有声小说按播放量排序的榜单；其余分类走关键词搜索
-      final list = _cat == 0
-          ? await _bili.rankHotNovel()
-          : await _bili.search(cat.keyword);
+      if (_isBili) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+      final source = SourceManager.instance.current;
+      final List<Book> list;
+      if (_cat == 0) {
+        list = await source.hot();
+      } else if (_isBili) {
+        final cat = DiscoverSeeds.categories[_cat];
+        list = await source.search(cat.keyword);
+      } else {
+        final cats = source.categories;
+        final idx = _cat - 1;
+        list = idx < cats.length
+            ? await source.category(cats[idx].id)
+            : <Book>[];
+      }
       if (!mounted) return;
       setState(() {
         _browseBooks = list;
@@ -97,6 +133,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<SourceStore>();
     return Scaffold(
       appBar: AppBar(title: const Text('发现')),
       body: Column(
@@ -146,21 +183,19 @@ class _DiscoverPageState extends State<DiscoverPage> {
     );
   }
 
-  // ---------- 分类浏览视图 ----------
   Widget _buildBrowseBody() {
-    final cat = DiscoverSeeds.categories[_cat];
+    final cats = _catLabels;
     return Column(
       children: [
-        // 分类栏
         SizedBox(
           height: 46,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            itemCount: DiscoverSeeds.categories.length,
+            itemCount: cats.length,
             separatorBuilder: (_, _) => const SizedBox(width: 8),
             itemBuilder: (context, i) {
-              final c = DiscoverSeeds.categories[i];
+              final c = cats[i];
               final selected = i == _cat;
               return GestureDetector(
                 onTap: () => _switchCategory(i),
@@ -208,7 +243,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 32),
-              children: _buildBrowseChildren(cat),
+              children: _buildBrowseChildren(),
             ),
           ),
         ),
@@ -216,7 +251,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
     );
   }
 
-  List<Widget> _buildBrowseChildren(DiscoverCategory cat) {
+  List<Widget> _buildBrowseChildren() {
     if (_browseLoading) {
       return [
         Padding(
@@ -233,8 +268,8 @@ class _DiscoverPageState extends State<DiscoverPage> {
           padding: const EdgeInsets.symmetric(vertical: 24),
           child: Column(
             children: [
-Icon(Icons.cloud_off_outlined,
-                size: 40, color: AppTheme.textHint),
+              Icon(Icons.cloud_off_outlined,
+                  size: 40, color: AppTheme.textHint),
               const SizedBox(height: 8),
               Text(
                 '加载失败，请稍后重试',
@@ -250,12 +285,13 @@ Icon(Icons.cloud_off_outlined,
           ),
         )
       else if (_browseBooks.isNotEmpty)
-        ..._buildRealResults(cat),
-      ..._buildAnchorsSection(cat),
+        ..._buildRealResults(),
+      if (_isBili && _cat < DiscoverSeeds.categories.length)
+        ..._buildAnchorsSection(DiscoverSeeds.categories[_cat]),
     ];
   }
 
-  List<Widget> _buildRealResults(DiscoverCategory cat) {
+  List<Widget> _buildRealResults() {
     return [
       Padding(
         padding: const EdgeInsets.fromLTRB(4, 4, 4, 10),
@@ -265,7 +301,7 @@ Icon(Icons.cloud_off_outlined,
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                _cat == 0 ? '热门榜单' : cat.label,
+                _cat == 0 ? '热门榜单' : _catLabels[_cat].label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -307,7 +343,6 @@ Icon(Icons.cloud_off_outlined,
     ];
   }
 
-  /// 精选主播：点击查看该主播相关的有声小说（进入独立搜索页）
   List<Widget> _buildAnchorsSection(DiscoverCategory cat) {
     return [
       Padding(
@@ -354,12 +389,11 @@ Icon(Icons.cloud_off_outlined,
 
   void _open(Book book) {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => BookDetailPage(bvid: book.bvid)),
+      MaterialPageRoute(builder: (_) => BookDetailPage(book: book)),
     );
   }
 }
 
-/// 精选主播卡片：圆形头像 + 名字 + 代表作（无网络依赖）
 class _AnchorTile extends StatelessWidget {
   final AnchorPick anchor;
   final VoidCallback onTap;

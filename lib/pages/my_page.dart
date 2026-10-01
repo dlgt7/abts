@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../core/app_meta.dart';
+import '../core/source/source_store.dart';
 import '../core/storage/shelf_store.dart';
 import '../core/theme/app_theme.dart';
 import '../core/theme/theme_controller.dart';
@@ -13,6 +14,7 @@ import '../services/umeng_analytics.dart';
 import '../widgets/book_cover.dart';
 import 'about_page.dart';
 import 'favorites_page.dart';
+import 'source_manager_page.dart';
 import 'player_page.dart';
 import 'recent_page.dart';
 import 'settings_page.dart';
@@ -28,6 +30,7 @@ class MyPage extends StatelessWidget {
     final shelf = context.watch<ShelfStore>();
     final player = context.watch<BookPlayer>();
     final auth = context.watch<LoginStore>();
+    final sourceStore = context.watch<SourceStore>();
     final books = shelf.books;
     final reading = books.where((b) => b.positionMs > 0).toList();
 
@@ -80,6 +83,14 @@ class MyPage extends StatelessWidget {
             subtitle:
                 reading.isEmpty ? '去发现找一本想听的书' : '共 ${reading.length} 本在听',
             onTap: () => _push(context, const RecentPage()),
+          ),
+          _menuTile(
+            context,
+            icon: Icons.source_rounded,
+            color: AppTheme.toneCyan,
+            title: '书源管理',
+            subtitle: '当前：${sourceStore.current.name}',
+            onTap: () => _push(context, const SourceManagerPage()),
           ),
           _menuTile(
             context,

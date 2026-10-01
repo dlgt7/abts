@@ -56,7 +56,7 @@ class FavoritesPage extends StatelessWidget {
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => BookDetailPage(bvid: sb.book.bvid),
+                        builder: (_) => BookDetailPage(book: sb.book),
                       ),
                     );
                   },

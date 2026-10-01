@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/source/source_manager.dart';
 import '../core/storage/search_history_store.dart';
 import '../core/storage/shelf_store.dart';
 import '../core/theme/app_theme.dart';
 import '../data/seed_books.dart';
 import '../models/book.dart';
-import '../services/bili_api.dart';
 import '../services/umeng_analytics.dart';
 import '../utils/format.dart';
 import '../widgets/book_cards.dart';
@@ -25,7 +25,7 @@ class SearchPage extends StatefulWidget {
 class _SearchPageState extends State<SearchPage> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
-  final _bili = BiliApi.instance;
+
 
   List<Book> _results = [];
   bool _loading = false;
@@ -101,11 +101,11 @@ class _SearchPageState extends State<SearchPage> {
       _hasSearched = true;
     });
     try {
-      final list = await _bili.search(
+      final source = SourceManager.instance.current;
+      final list = await source.search(
         kw,
         page: _page,
         pageSize: _pageSize,
-        onFirstPage: (t) => _total = t,
       );
       if (!mounted) return;
       setState(() {
@@ -131,7 +131,8 @@ class _SearchPageState extends State<SearchPage> {
     final nextPage = _page + 1;
     setState(() => _loadingMore = true);
     try {
-      final list = await _bili.search(
+      final source = SourceManager.instance.current;
+      final list = await source.search(
         kw,
         page: nextPage,
         pageSize: _pageSize,
@@ -314,7 +315,7 @@ class _SearchPageState extends State<SearchPage> {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => BookDetailPage(bvid: b.bvid),
+                builder: (_) => BookDetailPage(book: b),
               ),
             );
           },

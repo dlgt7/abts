@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../core/network/bili_client.dart';
+import '../core/source/source_manager.dart';
 import '../core/storage/shelf_store.dart';
 import '../core/theme/app_theme.dart';
 import '../models/book.dart';
 import '../models/chapter.dart';
 import '../player/book_player.dart';
-import '../services/bili_api.dart';
 import '../services/umeng_analytics.dart';
 import '../utils/format.dart';
 import '../widgets/book_cover.dart';
@@ -15,15 +14,15 @@ import 'player_page.dart';
 
 /// 书籍详情页：书籍信息 + 章节目录 + 收听入口
 class BookDetailPage extends StatefulWidget {
-  final String bvid;
-  const BookDetailPage({super.key, required this.bvid});
+  final Book book;
+  const BookDetailPage({super.key, required this.book});
 
   @override
   State<BookDetailPage> createState() => _BookDetailPageState();
 }
 
 class _BookDetailPageState extends State<BookDetailPage> {
-  final _bili = BiliApi.instance;
+  final _sources = SourceManager.instance;
 
   Book? _book;
   bool _loading = true;
@@ -44,7 +43,8 @@ class _BookDetailPageState extends State<BookDetailPage> {
       _error = null;
     });
     try {
-      final book = await _bili.detail(widget.bvid);
+      final source = _sources.get(widget.book.sourceId);
+      final book = await source.detail(widget.book.sourceBookId);
       if (!mounted) return;
       setState(() {
         _book = book;
@@ -54,7 +54,9 @@ class _BookDetailPageState extends State<BookDetailPage> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = e is BiliApiException ? e.message : '加载失败，请稍后重试';
+        _error = e is Exception
+            ? e.toString().replaceFirst('Exception: ', '')
+            : '加载失败，请稍后重试';
       });
     }
   }
@@ -425,7 +427,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
   void _toggleShelf(bool onShelf) async {
     final shelf = context.read<ShelfStore>();
     if (onShelf) {
-      await shelf.remove(widget.bvid);
+      await shelf.remove(widget.book.bvid);
     } else {
       await shelf.add(_book!);
       AppAnalytics.onEvent('shelf_add_manual');
