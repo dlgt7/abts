@@ -7,12 +7,12 @@ import 'package:media_kit/media_kit.dart' hide AudioTrack;
 import 'package:permission_handler/permission_handler.dart';
 
 import '../core/network/api_config.dart';
+import '../core/source/source_manager.dart';
 import '../core/storage/shelf_store.dart';
 import '../models/audio_stream.dart';
 import '../models/book.dart';
 import '../models/chapter.dart';
 import '../services/audio_focus.dart';
-import '../services/bili_api.dart';
 import '../services/umeng_analytics.dart';
 
 /// 听书播放器：按"章节"连播 + 断点续播 + 睡眠定时 + 系统媒体会话
@@ -21,7 +21,7 @@ class BookPlayer extends ChangeNotifier {
   static final BookPlayer instance = BookPlayer._();
 
   final Player _player = Player();
-  final BiliApi _api = BiliApi.instance;
+  final SourceManager _sources = SourceManager.instance;
   final ShelfStore _shelf = ShelfStore.instance;
 
   BaseAudioHandler? _audioHandler;
@@ -206,7 +206,7 @@ class BookPlayer extends ChangeNotifier {
     if (_book?.bvid == book.bvid && _chapters.isNotEmpty) {
       chapters = _chapters; // 同本书复用列表
     } else {
-      chapters = book.chapters ?? await _api.pageList(book.bvid);
+      chapters = book.chapters ?? await _fetchChapters(book);
     }
 
     if (chapters.isEmpty) {
@@ -352,42 +352,38 @@ class BookPlayer extends ChangeNotifier {
   }
 
   /// media_kit 请求流媒体时需要的请求头（否则 B 站 CDN 返回 403/412）
-  Map<String, String> _streamHeaders() => const {
+  Map<String, String> _streamHeaders() {
+    if (_book?.sourceId == 'bili') {
+      return const {
         'User-Agent': BiliEndpoints.userAgent,
         'Referer': BiliEndpoints.home,
       };
+    }
+    return const {
+      'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) '
+          'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 '
+          'Mobile Safari/537.36',
+    };
+  }
 
-  /// 候选音频地址列表：AAC 优先（稳定），flac/dolby 兜底；百度 http 转 https
+  Future<List<Chapter>> _fetchChapters(Book book) async {
+    final source = _sources.get(book.sourceId);
+    final full = await source.detail(book.sourceBookId);
+    return full.chapters ?? [];
+  }
+
   Future<List<String>> _fetchStreamCandidates(int cid) async {
     final cached = _urlCache[cid];
     if (cached != null) {
       final ageMs = DateTime.now().millisecondsSinceEpoch - cached.ts;
       if (ageMs < 90 * 60 * 1000) return [cached.url];
     }
-    final audio = await _api.playUrl(_book!.bvid, cid);
-    _lastAudio = audio;
-    debugPrint('[BookPlayer] 拿到音频: ${audio.tracks.length}条AAC '
-        'flac=${audio.flac?.baseUrl.isNotEmpty} dolby=${audio.dolby?.baseUrl.isNotEmpty}');
+    final book = _book!;
+    final source = _sources.get(book.sourceId);
+    final urls = await source.audioUrls(book.sourceBookId, cid);
+    debugPrint('[BookPlayer] ${source.name} 拿到 ${urls.length} 条音频');
 
-    final list = <String>[];
-    void add(AudioTrack? t) {
-      if (t == null) return;
-      String toHttps(String u) =>
-          u.startsWith('http://') ? 'https://${u.substring(7)}' : u;
-      if (t.baseUrl.isNotEmpty) list.add(toHttps(t.baseUrl));
-      for (final b in t.backupUrls) {
-        if (b.isNotEmpty) list.add(toHttps(b));
-      }
-    }
-
-    final aac = [...audio.tracks]..sort((a, b) => b.bandwidth.compareTo(a.bandwidth));
-    for (final t in aac) {
-      add(t);
-    }
-    add(audio.flac);
-    add(audio.dolby);
-
-    final uniq = list.toSet().toList();
+    final uniq = urls.where((u) => u.isNotEmpty).toSet().toList();
     if (uniq.isNotEmpty) {
       _urlCache[cid] =
           (url: uniq.first, ts: DateTime.now().millisecondsSinceEpoch);
