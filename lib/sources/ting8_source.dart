@@ -114,16 +114,46 @@ class Ting8Source implements BookSource {
   List<Book> _parseCategoryList(String html) {
     final books = <Book>[];
     final blockRegex = RegExp(
-      r'<a href="/mp3/(\d+)\.html"[^>]*class="img-80[^"]*"[^>]*>.*?<img src="([^"]+)"[^>]*>.*?<a href="/mp3/\d+\.html" class="f-bold">([^<]+)</a>.*?icon-user"></i>\s*([^<]*)</span>',
+      r'<div class="style-img[^"]*"[^>]*>\s*'
+      r'<a[^>]*class="img-80[^"]*"[^>]*>\s*'
+      r'<span[^>]*>\s*'
+      r'<img src="([^"]+)"[^>]*>\s*</span>\s*</a>\s*'
+      r'<section>\s*'
+      r'<h2[^>]*>\s*'
+      r'<span[^>]*>\s*<i[^>]*></i>\s*([^<]+)</span>\s*'
+      r'<a[^>]*class="f-bold"[^>]*>([^<]+)</a>',
       dotAll: true,
     );
     for (final m in blockRegex.allMatches(html)) {
-      final id = m.group(1)!;
-      final pic = m.group(2)!;
+      final pic = m.group(1)!;
+      final author = m.group(2)!.trim();
       final title = m.group(3)!.trim();
-      final author = m.group(4)!.trim();
-      if (title.isEmpty) continue;
+      final idMatch = RegExp(r'href="/mp3/(\d+)\.html"').firstMatch(pic.isEmpty ? '' : html);
+      final bookMatch = RegExp(r'<a[^>]*href="/mp3/(\d+)\.html"[^>]*class="img-80').firstMatch(html);
+      final id = bookMatch?.group(1) ?? '';
+      if (title.isEmpty || id.isEmpty) continue;
       books.add(_bookFromId(id, title, pic, author));
+    }
+    if (books.isEmpty) {
+      final itemRegex = RegExp(
+        r'href="/mp3/(\d+)\.html"[^>]*class="img-80[^"]*"[^>]*>.*?'
+        r'<img src="([^"]+)"[^>]*>.*?'
+        r'<a[^>]*class="f-bold"[^>]*>([^<]+)</a>',
+        dotAll: true,
+      );
+      final seen = <String>{};
+      for (final m in itemRegex.allMatches(html)) {
+        final id = m.group(1)!;
+        final pic = m.group(2)!;
+        final title = m.group(3)!.trim();
+        if (title.isEmpty || !seen.add(id)) continue;
+        final authorRegex = RegExp(
+          r'href="/mp3/$id\.html"[^>]*class="img-80[^"]*"[^>]*>.*?<section>.*?<span[^>]*>\s*<i[^>]*></i>\s*([^<]+)',
+          dotAll: true,
+        ).firstMatch(html);
+        final author = authorRegex?.group(1)?.trim() ?? '';
+        books.add(_bookFromId(id, title, pic, author));
+      }
     }
     return books;
   }

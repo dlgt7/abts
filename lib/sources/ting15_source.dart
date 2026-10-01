@@ -71,8 +71,7 @@ class Ting15Source implements BookSource {
   Future<List<Book>> search(String keyword, {int page = 1, int pageSize = 20}) async {
     final kw = keyword.trim();
     if (kw.isEmpty) return [];
-    final url =
-        '$_base/?s=ting-search-wd-$kw.html';
+    final url = '$_base/?s=ting-search-wd-$kw.html';
     final res = await _dio.get(url, options: Options(headers: _h(_base)));
     final html = res.data.toString();
     return _parseBookList(html);
@@ -80,8 +79,11 @@ class Ting15Source implements BookSource {
 
   @override
   Future<List<Book>> category(String catId, {int page = 1}) async {
-    final url = page <= 1 ? '$_base/$catId/' : '$_base/$catId/$page/';
-    final res = await _dio.get(url, options: Options(headers: _h(_base)));
+    final baseUrl = '$_base/$catId/';
+    final url = page <= 1
+        ? baseUrl
+        : baseUrl.replaceFirst(RegExp(r'/\$'), '/index$page.html');
+    final res = await _dio.get(url, options: Options(headers: _h(baseUrl)));
     final html = res.data.toString();
     return _parseBookList(html);
   }
@@ -96,38 +98,49 @@ class Ting15Source implements BookSource {
   List<Book> _parseBookList(String html) {
     final books = <Book>[];
     final liRegex = RegExp(
-      r'<li>\s*<div class="img">\s*<a href="/(\w+)/(\d+)\.html"[^>]*>\s*<img src="([^"]*)"[^>]*alt="([^"]*)"[^>]*>',
+      r'<li>\s*<div class="img">\s*<a href="/(\w+)/(\d+)\.html"[^>]*title="([^"]*)"[^>]*>\s*<img[^>]*src="([^"]*)"[^>]*alt="[^"]*"[^>]*>\s*</a>\s*</div>\s*'
+      r'<div class="info">\s*<h4>\s*<a[^>]*href="/\w+/(\d+)\.html"[^>]*title="([^"]*)"[^>]*>\s*'
+      r'([^<]+)',
       dotAll: true,
     );
-    final catBookRegex = RegExp(
-      r'<a href="/(?:wuxiaxuanhuan|kongbulingyi|tuilixuanyi|dushiyanqing|jiatinglunli|wenxuemingzhu|jingdianpingshu|quyixiqu|xiangshengxiaopin|yinyue)/(\d+)\.html"[^>]*alt="([^"]*)"',
-    );
-
     for (final m in liRegex.allMatches(html)) {
       final cat = m.group(1)!;
       final id = m.group(2)!;
-      final pic = m.group(3) ?? '';
-      final title = (m.group(4) ?? '').trim();
+      final pic = m.group(4) ?? '';
+      final title = (m.group(6) ?? m.group(5) ?? '').trim();
       if (title.isEmpty) continue;
       books.add(_bookFromCatId(cat, id, title, pic, '', ''));
     }
 
     if (books.isEmpty) {
-      for (final m in catBookRegex.allMatches(html)) {
-        final id = m.group(1)!;
-        final title = (m.group(2) ?? '').trim();
+      final itemRegex = RegExp(
+        r'<li>\s*<div class="img">\s*<a href="/(\w+)/(\d+)\.html"[^>]*title="([^"]*)"[^>]*>',
+      );
+      final titleRegex = RegExp(
+        r'<h4>\s*<a[^>]*href="/\w+/(\d+)\.html"[^>]*title="[^"]*"[^>]*>\s*([^<]+)',
+      );
+      final picRegex = RegExp(r'<img[^>]*src="([^"]*)"');
+      final seen = <String>{};
+      for (final m in itemRegex.allMatches(html)) {
+        final cat = m.group(1)!;
+        final id = m.group(2)!;
+        if (!seen.add('$cat/$id')) continue;
+        final titleMatch = titleRegex.firstMatch(html);
+        final picMatch = picRegex.firstMatch(html);
+        final title = titleMatch?.group(2)?.trim() ?? '';
         if (title.isEmpty) continue;
-        books.add(_bookFromCatId('wuxiaxuanhuan', id, title, '', '', ''));
+        books.add(_bookFromCatId(cat, id, title, picMatch?.group(1) ?? '', '', ''));
       }
     }
 
     if (books.isEmpty) {
-      final simpleRegex = RegExp(r'<a href="/(\w+)/(\d+)\.html"[^>]*>\s*([^<]{2,50})\s*</a>');
+      final simpleRegex = RegExp(r'<a href="/(\w+)/(\d+)\.html"[^>]*title="([^"]*)"[^>]*>');
+      final seen = <String>{};
       for (final m in simpleRegex.allMatches(html)) {
         final cat = m.group(1)!;
         final id = m.group(2)!;
         final title = m.group(3)!.trim();
-        if (title.isEmpty || title.contains('有声小说')) continue;
+        if (title.isEmpty || !seen.add('$cat/$id')) continue;
         books.add(_bookFromCatId(cat, id, title, '', '', ''));
       }
     }

@@ -1,4 +1,3 @@
-
 import 'package:dio/dio.dart';
 
 import '../core/source/book_source.dart';
@@ -33,6 +32,7 @@ class Ting39Source implements BookSource {
   ));
 
   String? _cookie;
+  bool _cookieCaptured = false;
 
   @override
   List<SourceCategory> get categories => const [
@@ -78,29 +78,75 @@ class Ting39Source implements BookSource {
 
   Map<String, String> _headers() => {
         'User-Agent': _ua,
-        if (_cookie != null) 'Cookie': 'pt_guid=$_cookie',
+        if (_cookie != null && _cookieCaptured)
+          'Cookie': 'pt_guid=${_encodeCookie(_cookie!)}',
       };
 
+  String _encodeCookie(String token) {
+    final sb = StringBuffer();
+    for (final rune in token.runes) {
+      if (rune == 32) {
+        sb.write('%20');
+      } else if ((rune >= 48 && rune <= 57) ||
+          (rune >= 65 && rune <= 90) ||
+          (rune >= 97 && rune <= 122) ||
+          rune == 45 || rune == 95 || rune == 46 || rune == 126) {
+        sb.write(String.fromCharCode(rune));
+      } else {
+        final hex = rune.toRadixString(16).toUpperCase();
+        if (hex.length <= 2) {
+          sb.write('%${'0' * (2 - hex.length)}$hex');
+        } else {
+          for (final c in hex.runes) {
+            sb.write('%${String.fromCharCode(c)}');
+          }
+        }
+      }
+    }
+    return sb.toString();
+  }
+
   Future<String> _fetch(String url, {String? referer}) async {
-    final res = await _dio.get(
-      url,
-      options: Options(
-        headers: {
-          'User-Agent': _ua,
-          'Referer': referer ?? _base,
-          if (_cookie != null) 'Cookie': 'pt_guid=$_cookie',
-        },
-        responseType: ResponseType.plain,
-      ),
+    final opts = Options(
+      headers: {
+        'User-Agent': _ua,
+        'Referer': referer ?? _base,
+        if (_cookie != null && _cookieCaptured)
+          'Cookie': 'pt_guid=${_encodeCookie(_cookie!)}',
+      },
+      responseType: ResponseType.plain,
     );
+    final res = await _dio.get(url, options: opts);
     return res.data.toString();
   }
 
   void _captureCookie(String html) {
-    final m = RegExp(r"var token = '([^']+)'").firstMatch(html);
-    if (m != null) {
-      _cookie = m.group(1);
+    if (_cookieCaptured) return;
+    final reversedMatch = RegExp(r'var reversed\s*=\s*"([^"]+)"').firstMatch(html);
+    if (reversedMatch != null) {
+      final reversed = reversedMatch.group(1)!;
+      final decoded =
+          String.fromCharCodes(reversed.split('').map((c) => c.codeUnitAt(0)).toList().reversed);
+      final decodedStr = _safeAtob(decoded);
+      final tokenMatch = RegExp(r"var token = '([^']+)'").firstMatch(decodedStr);
+      if (tokenMatch != null) {
+        _cookie = tokenMatch.group(1);
+        _cookieCaptured = true;
+      }
+    } else {
+      final tokenMatch = RegExp(r"var token = '([^']+)'").firstMatch(html);
+      if (tokenMatch != null) {
+        _cookie = tokenMatch.group(1);
+        _cookieCaptured = true;
+      }
     }
+  }
+
+  String _safeAtob(String b64) {
+    final clean = b64.replaceAll(RegExp(r'\s'), '');
+    final remainder = clean.length % 4;
+    final padded = remainder == 0 ? clean : clean + '=' * (4 - remainder);
+    return utf8.decode(base64Decode(padded));
   }
 
   @override
@@ -116,7 +162,8 @@ class Ting39Source implements BookSource {
             'User-Agent': _ua,
             'Referer': _base,
             'Content-Type': 'application/x-www-form-urlencoded',
-            if (_cookie != null) 'Cookie': 'pt_guid=$_cookie',
+            if (_cookie != null && _cookieCaptured)
+              'Cookie': 'pt_guid=${_encodeCookie(_cookie!)}',
           },
         ),
       );
@@ -136,10 +183,16 @@ class Ting39Source implements BookSource {
     final url = page <= 1
         ? '$_base/book/$catId/lastupdate.html'
         : '$_base/book/$catId/lastupdate/$page.html';
-    final html = await _fetch(url);
-    if (html.contains('ptcms_guard_retry')) {
+    var html = await _fetch(url);
+    if (html.contains('ptcms_guard_retry') || html.contains('var reversed')) {
       _captureCookie(html);
-      throw Exception('幻听网分类触发防爬，请稍后再试');
+      if (_cookie != null && _cookieCaptured) {
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+        html = await _fetch(url, referer: url);
+      }
+      if (html.contains('ptcms_guard_retry')) {
+        throw Exception('幻听网分类触发防爬，请稍后再试');
+      }
     }
     return _parseBookList(html);
   }
@@ -166,7 +219,8 @@ class Ting39Source implements BookSource {
     final blockRegex = RegExp(
       r'<a[^>]*class="thumb"[^>]*href="(/book/(\d+)\.html)"[^>]*>.*?'
       r'<img[^>]*data-original="([^"]*)"[^>]*>.*?'
-      r'<figcaption class="tab-book-title">\s*<a[^>]*>([^<]+)</a>\s*</figcaption>',
+      r'<dt[^>]*>\s*<span[^>]*>[^<]*</span>\s*'
+      r'<a[^>]*href="/book/\d+\.html"[^>]*>([^<]+)</a>',
       dotAll: true,
     );
     for (final m in blockRegex.allMatches(html)) {
@@ -176,35 +230,21 @@ class Ting39Source implements BookSource {
       if (title.isEmpty) continue;
       books.add(_bookFromId(id, title, pic, ''));
     }
-
-    if (books.isEmpty) {
-      final liRegex = RegExp(
-        r'<li class="works-li">.*?'
-        r'<a[^>]*href="(/book/(\d+)\.html)"[^>]*>.*?'
-        r'<img[^>]*data-original="([^"]*)"[^>]*>.*?'
-        r'<a href="/book/\d+\.html"[^>]*>([^<]+)</a>\s*</dt>',
-        dotAll: true,
-      );
-      for (final m in liRegex.allMatches(html)) {
-        final id = m.group(2)!;
-        final pic = m.group(3)!.trim();
-        final title = m.group(4)!.trim();
-        if (title.isEmpty) continue;
-        books.add(_bookFromId(id, title, pic, ''));
-      }
-    }
-
     if (books.isEmpty) {
       final simpleRegex = RegExp(
-        r'<a href="/book/(\d+)\.html"[^>]*>([^<]{2,50})</a>',
+        r'<a[^>]*class="thumb"[^>]*href="(/book/(\d+)\.html)"[^>]*>.*?'
+        r'<img[^>]*data-original="([^"]*)"[^>]*>.*?'
+        r'<dt[^>]*>\s*<span[^>]*>[^<]*</span>\s*'
+        r'<a[^>]*>([^<]+)</a>',
+        dotAll: true,
       );
       final seen = <String>{};
       for (final m in simpleRegex.allMatches(html)) {
-        final id = m.group(1)!;
-        if (!seen.add(id)) continue;
-        final title = m.group(2)!.trim();
-        if (title.isEmpty) continue;
-        books.add(_bookFromId(id, title, '', ''));
+        final id = m.group(2)!;
+        final pic = m.group(3)!.trim();
+        final title = m.group(4)!.trim();
+        if (title.isEmpty || !seen.add(id)) continue;
+        books.add(_bookFromId(id, title, pic, ''));
       }
     }
     return books;
@@ -217,12 +257,14 @@ class Ting39Source implements BookSource {
       referer: _base,
     );
 
-    if (html.contains('ptcms_guard_retry')) {
+    if (html.contains('ptcms_guard_retry') ||
+        html.contains('var reversed') ||
+        !_cookieCaptured) {
       _captureCookie(html);
-      await Future<void>.delayed(const Duration(milliseconds: 120));
-      if (_cookie == null) {
+      if (_cookie == null || !_cookieCaptured) {
         throw Exception('幻听网防爬限制，请稍后再试');
       }
+      await Future<void>.delayed(const Duration(milliseconds: 150));
       html = await _fetch(
         '$_base/book/$sourceBookId.html',
         referer: '$_base/book/$sourceBookId.html',
@@ -273,7 +315,6 @@ class Ting39Source implements BookSource {
       chapters.addAll(_parseChapters(html, sourceBookId));
     }
 
-
     final book = Book(
       bvid: _bookKey(sourceBookId),
       aid: 0,
@@ -291,35 +332,39 @@ class Ting39Source implements BookSource {
   }
 
   Future<String> _fetchWithCookie(String url, {String? referer}) async {
-    final res = await _dio.get(
-      url,
-      options: Options(
-        headers: {
-          'User-Agent': _ua,
-          'Referer': referer ?? _base,
-          if (_cookie != null) 'Cookie': 'pt_guid=$_cookie',
-        },
-        responseType: ResponseType.plain,
-      ),
+    final opts = Options(
+      headers: {
+        'User-Agent': _ua,
+        'Referer': referer ?? _base,
+        if (_cookie != null && _cookieCaptured)
+          'Cookie': 'pt_guid=${_encodeCookie(_cookie!)}',
+      },
+      responseType: ResponseType.plain,
     );
-    final html = res.data.toString();
-    if (html.contains('ptcms_guard_retry')) {
+    var res = await _dio.get(url, options: opts);
+    var html = res.data.toString();
+    if (html.contains('ptcms_guard_retry') ||
+        html.contains('var reversed') ||
+        !html.contains('/tingshu/')) {
       _captureCookie(html);
-      await Future<void>.delayed(const Duration(milliseconds: 120));
-      final retry = await _dio.get(
+      if (!_cookieCaptured) {
+        throw Exception('幻听网播放页防爬限制，请稍后再试');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      res = await _dio.get(
         url,
         options: Options(
           headers: {
             'User-Agent': _ua,
             'Referer': referer ?? _base,
-            'Cookie': 'pt_guid=$_cookie',
+            'Cookie': 'pt_guid=${_encodeCookie(_cookie!)}',
           },
           responseType: ResponseType.plain,
         ),
       );
-      final retryHtml = retry.data.toString();
+      final retryHtml = res.data.toString();
       if (retryHtml.contains('ptcms_guard_retry')) {
-        throw Exception('幻听网防爬限制，请稍后再试');
+        throw Exception('幻听网播放页防爬限制，请稍后再试');
       }
       return retryHtml;
     }
