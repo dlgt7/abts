@@ -212,34 +212,21 @@ class Ting39Source implements BookSource {
 
   @override
   Future<Book> detail(String sourceBookId) async {
-    final res = await _dio.get(
+    var html = await _fetch(
       '$_base/book/$sourceBookId.html',
-      options: Options(
-        headers: {
-          'User-Agent': _ua,
-          'Referer': _base,
-          if (_cookie != null) 'Cookie': 'pt_guid=$_cookie',
-        },
-        responseType: ResponseType.plain,
-      ),
+      referer: _base,
     );
-    var html = res.data.toString();
 
     if (html.contains('ptcms_guard_retry')) {
       _captureCookie(html);
       await Future<void>.delayed(const Duration(milliseconds: 120));
-      res = await _dio.get(
+      if (_cookie == null) {
+        throw Exception('幻听网防爬限制，请稍后再试');
+      }
+      html = await _fetch(
         '$_base/book/$sourceBookId.html',
-        options: Options(
-          headers: {
-            'User-Agent': _ua,
-            'Referer': '$_base/book/$sourceBookId.html',
-            'Cookie': 'pt_guid=$_cookie',
-          },
-          responseType: ResponseType.plain,
-        ),
+        referer: '$_base/book/$sourceBookId.html',
       );
-      html = res.data.toString();
       if (html.contains('ptcms_guard_retry')) {
         throw Exception('幻听网防爬限制，请稍后再试');
       }
@@ -267,15 +254,14 @@ class Ting39Source implements BookSource {
     var desc = descMatch?.group(1)?.trim() ?? '';
     desc = _stripHtmlTags(desc);
 
-    final dirUrlMatch = RegExp(r'/bookdir/[^"]+')
-        .firstMatch(html)?
-        .group(0)
-        ?.trim();
+    final dirUrlMatch = RegExp(
+      r'href="(/bookdir/[^"]+\.html)"',
+    ).firstMatch(html);
+    final dirPath = dirUrlMatch?.group(1)?.trim();
 
     final chapters = <Chapter>[];
 
-    if (dirUrlMatch != null && html.contains(dirUrlMatch)) {
-      final dirPath = dirUrlMatch;
+    if (dirPath != null) {
       final dirHtml = await _fetchWithCookie(
         '$_base$dirPath',
         referer: '$_base/book/$sourceBookId.html',
@@ -286,6 +272,7 @@ class Ting39Source implements BookSource {
     if (chapters.isEmpty) {
       chapters.addAll(_parseChapters(html, sourceBookId));
     }
+
 
     final book = Book(
       bvid: _bookKey(sourceBookId),
@@ -341,8 +328,10 @@ class Ting39Source implements BookSource {
 
   List<Chapter> _parseChapters(String html, String sourceBookId) {
     final chapters = <Chapter>[];
+    final escapedId = RegExp.escape(sourceBookId);
     final chapterRegex = RegExp(
-      r'<a[^>]*href=["\']?/tingshu/$sourceBookId/(\d+)\.html["\']?[^>]*>(.*?)</a>',
+      RegExp.escape('<a href="/tingshu/$escapedId/') +
+          r'(\d+)\.html"[^>]*>(.*?)</a>',
       dotAll: true,
     );
     for (final m in chapterRegex.allMatches(html)) {
@@ -358,13 +347,17 @@ class Ting39Source implements BookSource {
   @override
   Future<List<String>> audioUrls(String sourceBookId, int chapterId) async {
     final url = '$_base/tingshu/$sourceBookId/$chapterId.html';
-    var html = await _fetchWithCookie(url, referer: '$_base/book/$sourceBookId.html');
+    var html = await _fetchWithCookie(
+      url,
+      referer: '$_base/book/$sourceBookId.html',
+    );
 
-    var urlMatch =
-        RegExp(r'["\']?(https?://[^"\']+\.(?:mp3|m4a|wav|ogg|flac))', caseSensitive: false)
-            .firstMatch(html);
-    if (urlMatch != null) {
-      return [urlMatch.group(1)!];
+    final directAudio = RegExp(
+      r'https?://[^\s"\'<>]+\.(mp3|m4a|wav|ogg|flac)',
+      caseSensitive: false,
+    ).firstMatch(html);
+    if (directAudio != null) {
+      return [directAudio.group(0)!];
     }
 
     if (html.contains('ptcms_guard_retry') || html.contains('var reversed')) {
@@ -377,11 +370,12 @@ class Ting39Source implements BookSource {
       return [audioTagMatch.group(1)!];
     }
 
-    final m3u8Match =
-        RegExp(r'(https?://[^"\'\s]+\.m3u8)', caseSensitive: false)
-            .firstMatch(html);
+    final m3u8Match = RegExp(
+      r'https?://[^\s"\'<>]+\.m3u8',
+      caseSensitive: false,
+    ).firstMatch(html);
     if (m3u8Match != null) {
-      return [m3u8Match.group(1)!];
+      return [m3u8Match.group(0)!];
     }
 
     throw Exception('未找到幻听网音频地址');
