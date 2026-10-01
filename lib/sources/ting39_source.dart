@@ -375,10 +375,8 @@ class Ting39Source implements BookSource {
 
   List<Chapter> _parseChapters(String html, String sourceBookId) {
     final chapters = <Chapter>[];
-    final escapedId = RegExp.escape(sourceBookId);
     final chapterRegex = RegExp(
-      RegExp.escape('<a href="/tingshu/$escapedId/') +
-          r'(\d+)\.html"[^>]*>(.*?)</a>',
+      '<a href="/tingshu/${RegExp.escape(sourceBookId)}/(\\d+)\\.html"[^>]*>(.*?)</a>',
       dotAll: true,
     );
     for (final m in chapterRegex.allMatches(html)) {

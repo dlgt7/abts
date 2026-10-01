@@ -188,7 +188,8 @@ class Ting8Source implements BookSource {
 
     final chapters = <Chapter>[];
     final chapterRegex = RegExp(
-      r'<a href="/play/\d+-0-(\d+)\.html" target="_self">([^<]+)</a>',
+      r'<a href="/play/\d+-0-(\d+)\.html"[^>]*>([^<]+)</a>',
+      dotAll: true,
     );
     for (final m in chapterRegex.allMatches(html)) {
       final part = int.tryParse(m.group(1)!) ?? 0;

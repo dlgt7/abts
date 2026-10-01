@@ -184,7 +184,7 @@ class Ting15Source implements BookSource {
 
     final chapters = <Chapter>[];
     final chapterRegex = RegExp(
-      r'<a href="/$cat/$id/0-(\d+)\.html"[^>]*>(.*?)</a>',
+      '<a href="/${RegExp.escape(cat)}/${RegExp.escape(id)}/0-(\\d+)\\.html"[^>]*>(.*?)</a>',
       dotAll: true,
     );
     for (final m in chapterRegex.allMatches(html)) {
