@@ -243,7 +243,9 @@ class Ting15Source implements BookSource {
         },
       ),
     );
-    final json = jsonDecode(apiRes.data.toString());
+    final raw = apiRes.data.toString();
+    final clean = raw.startsWith('\uFEFF') ? raw.substring(1) : raw;
+    final json = jsonDecode(clean);
     final status = json['status'];
     if (status == -1 || status == 0) {
       throw Exception('有听网音频不可用（状态 $status）');
