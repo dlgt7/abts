@@ -288,7 +288,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
     int resumeIndex,
     int resumeMs,
     bool hasProgress,
-    List chapters,
+    List<Chapter> chapters,
   ) {
     final nowPlaying = player.loaded && player.book?.bvid == book.bvid;
     return SafeArea(
