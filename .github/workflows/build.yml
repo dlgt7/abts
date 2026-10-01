@@ -52,12 +52,12 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > android/app/abitingshu.keystore
+            echo "$KEYSTORE_BASE64" | base64 -d > android/app/abitingge.keystore
             cat > android/key.properties <<EOF
           storePassword=$KEYSTORE_PASSWORD
           keyPassword=$KEY_PASSWORD
           keyAlias=$KEY_ALIAS
-          storeFile=abitingshu.keystore
+          storeFile=abitingge.keystore
           EOF
             echo "已配置 release 签名"
           else
@@ -112,11 +112,11 @@ jobs:
           path: dist/abts-v${{ steps.ver.outputs.version }}-x86_64.apk
           retention-days: 30
 
-      - name: Upload artifacts
+      - name: Upload universal APK
         uses: actions/upload-artifact@v4
         with:
-          name: abts-apks
-          path: dist/*.apk
+          name: abts-universal
+          path: dist/abts-v${{ steps.ver.outputs.version }}-universal.apk
           retention-days: 30
 
       - name: Create Release
