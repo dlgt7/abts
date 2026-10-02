@@ -3,7 +3,10 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:pointycastle/pointycastle.dart';
+import 'package:pointycastle/api.dart';
+import 'package:pointycastle/aead/chacha20_poly1305.dart';
+import 'package:pointycastle/block/aes.dart';
+import 'package:pointycastle/block/modes/gcm.dart';
 
 import '../core/source/book_source.dart';
 import '../models/book.dart';
@@ -178,7 +181,7 @@ class TingyouSource implements BookSource {
     final aeadNonce = Uint8List(12);
     aeadNonce.setRange(4, 12, nonce24.sublist(16, 24));
     final cipher = ChaCha20Poly1305();
-    cipher.init(false, AEADParameters(KeyParameter(subKey), 128, aeadNonce, null));
+    cipher.init(false, AEADParameters(KeyParameter(subKey), 128, aeadNonce, Uint8List(0)));
     final out = Uint8List(cipher.getOutputSize(ciphertext.length));
     var off = cipher.processBytes(ciphertext, 0, ciphertext.length, out, 0);
     off += cipher.doFinal(out, off);
@@ -189,7 +192,7 @@ class TingyouSource implements BookSource {
     final iv = Uint8List.fromList(
         List.generate(12, (_) => Random.secure().nextInt(256)));
     final cipher = GCMBlockCipher(AESEngine());
-    cipher.init(true, AEADParameters(KeyParameter(_cryptoKey), 128, iv, null));
+    cipher.init(true, AEADParameters(KeyParameter(_cryptoKey), 128, iv, Uint8List(0)));
     final bytes = utf8.encode(plain);
     final out = Uint8List(cipher.getOutputSize(bytes.length));
     var off = cipher.processBytes(bytes, 0, bytes.length, out, 0);
