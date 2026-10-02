@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:pointycastle/api.dart';
 import 'package:pointycastle/stream/chacha20poly1305.dart';
+import 'package:pointycastle/stream/chacha7539.dart';
+import 'package:pointycastle/macs/poly1305.dart';
 import 'package:pointycastle/block/aes.dart';
 import 'package:pointycastle/block/modes/gcm.dart';
 
@@ -180,7 +182,7 @@ class TingyouSource implements BookSource {
     final subKey = _hChaCha20(_cryptoKey, Uint8List.fromList(nonce24.sublist(0, 16)));
     final aeadNonce = Uint8List(12);
     aeadNonce.setRange(4, 12, nonce24.sublist(16, 24));
-    final cipher = ChaCha20Poly1305();
+    final cipher = ChaCha20Poly1305(ChaCha7539Engine(), Poly1305());
     cipher.init(false, AEADParameters(KeyParameter(subKey), 128, aeadNonce, Uint8List(0)));
     final out = Uint8List(cipher.getOutputSize(ciphertext.length));
     var off = cipher.processBytes(ciphertext, 0, ciphertext.length, out, 0);
