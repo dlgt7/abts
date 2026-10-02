@@ -38,7 +38,8 @@ class BookPlayer extends ChangeNotifier {
   String? _playbackUrl;
   BookAudio? _lastAudio;
 
-  final Map<int, ({String url, int ts})> _urlCache = {};
+  final Map<String, ({String url, int ts})> _urlCache = {};
+  int _loadSeq = 0;
   Timer? _positionTimer;
   Timer? _sleepTimer;
   Duration _sleepRemaining = Duration.zero;
@@ -102,6 +103,7 @@ class BookPlayer extends ChangeNotifier {
     _player.stream.error.listen((e) {
       _loading = false;
       _error = '播放失败，请稍后重试';
+      _urlCache.remove('${_book?.bvid}:$_index');
       debugPrint('[BookPlayer] error: $e');
       notifyListeners();
     });
@@ -246,13 +248,15 @@ class BookPlayer extends ChangeNotifier {
     await _loadTarget(index, resumeMs: offsetMs);
   }
 
-  /// 加载并打开音源：成功才提交新状态，任何一步失败都滚回旧状态
+  /// 加载并打开音源：成功才提交新状态，任何一步失败都滚回旧状态。
+  /// 请求代数 _loadSeq 防并发切章竞争：过期请求直接放弃，不回滚 UI 状态
   Future<bool> _loadTarget(
     int index, {
     int resumeMs = 0,
     Book? newBook,
     List<Chapter>? newChapters,
   }) async {
+    final seq = ++_loadSeq;
     final prevBook = _book;
     final prevChapters = _chapters;
     final prevIndex = _index;
@@ -266,13 +270,19 @@ class BookPlayer extends ChangeNotifier {
     _error = null;
     notifyListeners();
 
+    try {
+      await _player.pause();
+    } catch (_) {}
+
     var ok = false;
     try {
       if (_chapters.isEmpty || index < 0 || index >= _chapters.length) {
         throw StateError('章节索引越界：$index');
       }
+      if (seq != _loadSeq) return false;
       final chapter = _chapters[index];
       final candidates = await _fetchStreamCandidates(chapter.cid);
+      if (seq != _loadSeq) return false;
       if (candidates.isEmpty) {
         throw StateError('获取音频链接失败（章节可能无法播放）');
       }
@@ -283,8 +293,10 @@ class BookPlayer extends ChangeNotifier {
           // 有续播位置时先打开再精确跳转，保证落点准确到秒
           await _player.open(Media(url, httpHeaders: _streamHeaders()),
               play: resumeMs <= 0);
+          if (seq != _loadSeq) return false;
           if (resumeMs > 0) {
             await _seekToResume(resumeMs);
+            if (seq != _loadSeq) return false;
           }
           if (_error != null) _error = null;
           ok = true;
@@ -294,6 +306,7 @@ class BookPlayer extends ChangeNotifier {
           break;
         } catch (e) {
           debugPrint('[BookPlayer] 候选音轨 $i 打开失败: $e');
+          if (seq != _loadSeq) return false;
           if (i < candidates.length - 1) {
             await _player.stop();
           }
@@ -307,20 +320,24 @@ class BookPlayer extends ChangeNotifier {
       _loaded = true;
       AppAnalytics.onEvent('play_start');
     } catch (e) {
-      _error = '播放失败，请稍后重试';
-      debugPrint('[BookPlayer] 加载失败: $e');
-    } finally {
-      if (!ok) {
-        _book = prevBook;
-        _chapters = prevChapters;
-        _index = prevIndex;
-        _loaded = prevLoaded;
-        _playbackUrl = prevUrl;
-        _lastAudio = prevAudio;
+      if (seq == _loadSeq) {
+        _error = '播放失败，请稍后重试';
+        debugPrint('[BookPlayer] 加载失败: $e');
       }
-      _loading = false;
-      _pushNowPlaying();
-      notifyListeners();
+    } finally {
+      if (seq == _loadSeq) {
+        if (!ok) {
+          _book = prevBook;
+          _chapters = prevChapters;
+          _index = prevIndex;
+          _loaded = prevLoaded;
+          _playbackUrl = prevUrl;
+          _lastAudio = prevAudio;
+        }
+        _loading = false;
+        _pushNowPlaying();
+        notifyListeners();
+      }
     }
     return ok;
   }
@@ -391,19 +408,20 @@ class BookPlayer extends ChangeNotifier {
   }
 
   Future<List<String>> _fetchStreamCandidates(int cid) async {
-    final cached = _urlCache[cid];
+    final book = _book!;
+    final key = '${book.bvid}:$cid';
+    final cached = _urlCache[key];
     if (cached != null) {
       final ageMs = DateTime.now().millisecondsSinceEpoch - cached.ts;
       if (ageMs < 90 * 60 * 1000) return [cached.url];
     }
-    final book = _book!;
     final source = _sources.get(book.sourceId);
     final urls = await source.audioUrls(book.sourceBookId, cid);
     debugPrint('[BookPlayer] ${source.name} 拿到 ${urls.length} 条音频');
 
     final uniq = urls.where((u) => u.isNotEmpty).toSet().toList();
     if (uniq.isNotEmpty) {
-      _urlCache[cid] =
+      _urlCache[key] =
           (url: uniq.first, ts: DateTime.now().millisecondsSinceEpoch);
       if (_urlCache.length > 6) {
         final eldest = _urlCache.keys.first;
@@ -475,7 +493,7 @@ class BookPlayer extends ChangeNotifier {
         processingState: processing,
         playing: playing,
         updatePosition: pos,
-        bufferedPosition: dur,
+        bufferedPosition: _player.state.buffer,
       ),
     );
   }
