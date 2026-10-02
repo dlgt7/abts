@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:pointycastle/api.dart';
-import 'package:pointycastle/aead/chacha20_poly1305.dart';
+import 'package:pointycastle/stream/chacha20poly1305.dart';
 import 'package:pointycastle/block/aes.dart';
 import 'package:pointycastle/block/modes/gcm.dart';
 
