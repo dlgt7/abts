@@ -22,6 +22,7 @@ import 'services/umeng_analytics.dart';
 import 'sources/bili_source.dart';
 import 'sources/psmp3_source.dart';
 import 'sources/ting15_source.dart';
+import 'sources/tingyou_source.dart';
 
 
 
@@ -42,7 +43,8 @@ Future<void> _bootstrap() async {
   SourceManager.instance
     ..register(BiliSource())
     ..register(Psmp3Source())
-    ..register(Ting15Source());
+    ..register(Ting15Source())
+    ..register(TingyouSource());
   try {
     await Future.wait([
       BiliClient.instance.initLocal(),
