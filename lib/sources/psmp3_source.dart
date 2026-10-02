@@ -16,6 +16,7 @@ class Psmp3Source implements BookSource {
 
   static const _base = 'https://www.psmp3.com';
   static const _sourceId = 'psmp3';
+  static const _cacheTtlMs = 30 * 60 * 1000;
 
   static const _ua =
       'Mozilla/5.0 (Linux; Android 12; Mobile) AppleWebKit/537.36 '
@@ -26,6 +27,9 @@ class Psmp3Source implements BookSource {
     receiveTimeout: const Duration(seconds: 30),
     responseType: ResponseType.plain,
   ));
+
+  final Map<String, ({List<({String name, String url})> items, int ts})>
+      _volumeCache = {};
 
   Map<String, String> _headers({String? referer}) => {
         'User-Agent': _ua,
@@ -40,7 +44,7 @@ class Psmp3Source implements BookSource {
         SourceCategory(id: 'llf', label: '刘兰芳'),
         SourceCategory(id: 'llr', label: '连丽如'),
         SourceCategory(id: 'zsz', label: '张少佐'),
-        SourceCategory(id: 'tzy', label: '战战元'),
+        SourceCategory(id: 'tzy', label: '田战义'),
       ];
 
   String _bookKey(String path) => '$_sourceId:$path';
@@ -154,55 +158,150 @@ class Psmp3Source implements BookSource {
     }
   }
 
-  @override
-  Future<Book> detail(String sourceBookId) async {
-    final html = await _fetch('$sourceBookId.html', referer: _base);
-
-    final titleMatch = RegExp(r'<h1[^>]*>([^<]+)</h1>', caseSensitive: false)
-        .firstMatch(html);
-    final title = titleMatch?.group(1)?.trim() ?? sourceBookId;
-
-    final coverMatch = RegExp(r'cover:\s*"([^"]+)"', caseSensitive: false)
-        .firstMatch(html);
-    final pic = coverMatch != null ? _normalizeUrl(coverMatch.group(1)!) : '';
-
+  List<({String name, String url})> _parsePlayItems(String html) {
+    final items = <({String name, String url})>[];
     final playRegex = RegExp(
       r'\{name:\s*"([^"]+)"[^}]*url:\s*"([^"]+)"',
       caseSensitive: false,
     );
-    final chapters = <Chapter>[];
-    var idx = 0;
     for (final m in playRegex.allMatches(html)) {
-      final part = m.group(1)!.trim();
-      chapters.add(Chapter(cid: idx, page: idx + 1, part: part));
-      idx++;
+      final name = m.group(1)!.trim();
+      final url = _normalizeUrl(m.group(2)!);
+      if (name.isEmpty || url.isEmpty) continue;
+      items.add((name: name, url: url));
+    }
+    return items;
+  }
+
+  String _volumePrefix(String path) {
+    final m = RegExp(r'-(\d+)$').firstMatch(path);
+    if (m == null) return '';
+    return path.substring(0, m.start + 1);
+  }
+
+  List<String> _volumePaths(String html, String currentPath) {
+    final prefix = _volumePrefix(currentPath);
+    final dir = currentPath.startsWith('/') ? currentPath.substring(1) : currentPath;
+    final found = <String>{currentPath};
+    for (final m in RegExp('href="([^"]+)"').allMatches(html)) {
+      final raw = m.group(1)!;
+      if (!raw.endsWith('.html')) continue;
+      var p = raw.startsWith('http')
+          ? raw
+          : raw.startsWith('/')
+              ? '$_base$raw'
+              : '';
+      if (!p.startsWith('$_base/')) continue;
+      p = _extractPath(p);
+      if (prefix.isNotEmpty) {
+        if (!p.startsWith(prefix)) continue;
+        if (!RegExp(r'^\d+$').hasMatch(p.substring(prefix.length))) continue;
+        found.add(p);
+      } else if (RegExp('^/$dir/[^/]+-\\d+\$').hasMatch(p)) {
+        found.add(p);
+      }
+    }
+    final list = found.toList();
+    list.sort((a, b) {
+      final na = int.tryParse(a.split('-').last) ?? 0;
+      final nb = int.tryParse(b.split('-').last) ?? 0;
+      return na.compareTo(nb);
+    });
+    return list;
+  }
+
+  String _bookPathFromPrefix(String prefix) {
+    final idx = prefix.indexOf('/', 1);
+    if (idx <= 0) return '';
+    return prefix.substring(0, idx);
+  }
+
+  Future<List<({String name, String url})>> _loadAllItems(
+    String sourceBookId, {
+    String? rootHtml,
+  }) async {
+    final cached = _volumeCache[sourceBookId];
+    if (cached != null &&
+        DateTime.now().millisecondsSinceEpoch - cached.ts < _cacheTtlMs) {
+      return cached.items;
+    }
+    final rootPath = _extractPath(sourceBookId);
+    final html = rootHtml ?? await _fetch('$rootPath.html', referer: _base);
+    final rootItems = _parsePlayItems(html);
+    var paths = _volumePaths(html, rootPath);
+
+    final prefix = _volumePrefix(rootPath);
+    var bookPath = '';
+    if (prefix.isNotEmpty) {
+      bookPath = _bookPathFromPrefix(prefix);
+      if (bookPath.isNotEmpty) {
+        try {
+          final bookHtml = await _fetch('$bookPath.html', referer: _base);
+          paths = _volumePaths(bookHtml, bookPath);
+        } catch (_) {}
+      }
+    }
+
+    final items = <({String name, String url})>[];
+    for (final p in paths) {
+      if (p == rootPath) {
+        items.addAll(rootItems);
+        continue;
+      }
+      if (bookPath.isNotEmpty && p == bookPath) continue;
+      try {
+        final volHtml = await _fetch('$p.html', referer: _base);
+        items.addAll(_parsePlayItems(volHtml));
+      } catch (_) {}
+    }
+    if (items.isEmpty) items.addAll(rootItems);
+    if (items.isNotEmpty) {
+      _volumeCache[sourceBookId] =
+          (items: items, ts: DateTime.now().millisecondsSinceEpoch);
+    }
+    return items;
+  }
+
+  @override
+  Future<Book> detail(String sourceBookId) async {
+    final rootPath = _extractPath(sourceBookId);
+    final rootHtml = await _fetch('$rootPath.html', referer: _base);
+
+    var title = RegExp(r'<h1[^>]*>([^<]+)</h1>', caseSensitive: false)
+            .firstMatch(rootHtml)
+            ?.group(1)
+            ?.trim() ??
+        sourceBookId;
+    title = title.replaceAll(RegExp(r'在线收听[,，]免费下载$'), '').trim();
+
+    final coverMatch = RegExp(r'cover:\s*"([^"]+)"', caseSensitive: false)
+        .firstMatch(rootHtml);
+    final pic = coverMatch != null ? _normalizeUrl(coverMatch.group(1)!) : '';
+
+    final items = await _loadAllItems(sourceBookId, rootHtml: rootHtml);
+    final chapters = <Chapter>[];
+    for (var i = 0; i < items.length; i++) {
+      chapters.add(Chapter(cid: i, page: i + 1, part: items[i].name));
     }
 
     return Book(
-      bvid: _bookKey(sourceBookId),
+      bvid: _bookKey(rootPath),
       aid: 0,
       title: title,
       pic: pic,
       author: '',
       sourceId: _sourceId,
-      sourceBookId: sourceBookId,
+      sourceBookId: rootPath,
+      pages: chapters.length,
       chapters: chapters,
     );
   }
 
   @override
   Future<List<String>> audioUrls(String sourceBookId, int chapterId) async {
-    final html = await _fetch('$sourceBookId.html', referer: _base);
-    final playRegex = RegExp(
-      r'\{name:\s*"([^"]+)"[^}]*url:\s*"([^"]+)"',
-      caseSensitive: false,
-    );
-    final urls = <String>[];
-    for (final m in playRegex.allMatches(html)) {
-      urls.add(_normalizeUrl(m.group(2)!));
-    }
-    if (chapterId >= 0 && chapterId < urls.length) {
-      return [urls[chapterId]];
+    final items = await _loadAllItems(sourceBookId);
+    if (chapterId >= 0 && chapterId < items.length) {
+      return [items[chapterId].url];
     }
     throw Exception('未找到评书音频地址');
   }

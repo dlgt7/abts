@@ -216,46 +216,54 @@ class Ting15Source implements BookSource {
     final bookId = parts.length > 1 ? parts[1] : parts[0];
 
     final playUrl = '$_base/$cat/$bookId/0-$chapterId.html';
-    final res = await _dio.get(
-      playUrl,
-      options: Options(headers: _headers(referer: '$_base/$cat/$bookId.html')),
-    );
-    final html = res.data.toString();
+    final referer = '$_base/$cat/$bookId.html';
 
-    String? _meta(String name) =>
-        RegExp('<meta name="$name" content="([^"]*)"').firstMatch(html)?.group(1);
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 1200));
+      }
+      final res = await _dio.get(
+        playUrl,
+        options: Options(headers: _headers(referer: referer)),
+      );
+      final html = res.data.toString();
 
-    final token = _meta('_c') ?? '';
-    final b = _meta('_b') ?? bookId;
-    final cp = _meta('_cp') ?? '$chapterId';
-    final p = _meta('_p') ?? '0';
-    final l = _meta('_l') ?? '1';
+      String? _meta(String name) =>
+          RegExp('<meta name="$name" content="([^"]*)"').firstMatch(html)?.group(1);
 
-    final apiRes = await _dio.post(
-      '$_base/?s=api-getneoplay',
-      data: {'bookId': b, 'isPay': p, 'page': cp},
-      options: Options(
-        headers: {
-          ..._headers(referer: playUrl),
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'xt': token,
-          'l': l,
-        },
-      ),
-    );
-    final raw = apiRes.data.toString();
-    final clean = raw.startsWith('\uFEFF') ? raw.substring(1) : raw;
-    final json = jsonDecode(clean);
-    final status = json['status'];
-    if (status == -1 || status == 0) {
-      throw Exception('有听网音频不可用（状态 $status）');
+      final token = _meta('_c') ?? '';
+      final b = _meta('_b') ?? bookId;
+      final p = _meta('_p') ?? '0';
+      final l = _meta('_l') ?? '1';
+
+      final apiRes = await _dio.post(
+        '$_base/?s=api-getneoplay',
+        data: {'bookId': b, 'isPay': p, 'page': '$chapterId'},
+        options: Options(
+          headers: {
+            ..._headers(referer: playUrl),
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'xt': token,
+            'l': l,
+          },
+        ),
+      );
+      final raw = apiRes.data.toString();
+      final clean = raw.startsWith('\uFEFF') ? raw.substring(1) : raw;
+      final json = jsonDecode(clean);
+      final status = json['status'];
+      if (status == -2) continue;
+      if (status == -1 || status == 0) {
+        throw Exception('有听网音频不可用（状态 $status）');
+      }
+      final ourl = json['ourl']?.toString() ?? '';
+      final url = ourl.isNotEmpty ? ourl : (json['url']?.toString() ?? '');
+      if (url.isEmpty) {
+        throw Exception('未找到有听网音频地址');
+      }
+      return [url];
     }
-    final ourl = json['ourl']?.toString() ?? '';
-    final url = ourl.isNotEmpty ? ourl : (json['url']?.toString() ?? '');
-    if (url.isEmpty) {
-      throw Exception('未找到有听网音频地址');
-    }
-    return [url];
+    throw Exception('有听网切集限流，请稍后重试');
   }
 
   static String _stripHtml(String input) {
