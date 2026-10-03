@@ -1,1 +1,58 @@
-1
+[
+  {
+    "id": "ting55",
+    "name": "恋听网",
+    "description": "ting55.com 免费有声小说（本地源）",
+    "baseUrl": "https://ting55.com",
+    "categories": [
+      {"id": "1", "label": "玄幻"},
+      {"id": "2", "label": "武侠"},
+      {"id": "3", "label": "都市"},
+      {"id": "4", "label": "言情"},
+      {"id": "5", "label": "穿越"},
+      {"id": "6", "label": "科幻"},
+      {"id": "7", "label": "推理"},
+      {"id": "8", "label": "恐怖"},
+      {"id": "9", "label": "惊悚"},
+      {"id": "10", "label": "历史"},
+      {"id": "11", "label": "经典"},
+      {"id": "12", "label": "相声"},
+      {"id": "14", "label": "评书"},
+      {"id": "13", "label": "百家讲坛"}
+    ],
+    "searchPath": "/search/{kw}",
+    "categoryPath": "/category/{catId}/{page}",
+    "detailPath": "/book/{bookId}",
+    "listParse": {
+      "item": {"pattern": "<a[^>]*href=\"/book/(\\d+)\"[^>]*title=\"([^\"]*)\"", "group": 1},
+      "bookId": {"pattern": "<a[^>]*href=\"/book/(\\d+)\"[^>]*title=\"[^\"]*\"", "group": 1},
+      "title": {"pattern": "<a[^>]*href=\"/book/\\d+\"[^>]*title=\"([^\"]*)\"", "group": 2},
+      "pic": {"pattern": "<img[^>]*src=\"([^\"]+)\"", "group": 1},
+      "author": {"pattern": "作者：([^<]+)", "group": 1},
+      "announcer": {"pattern": "class=\"by\">([^<]+)</a>", "group": 1}
+    },
+    "detailTitle": {"pattern": "<h1>(.*?)</h1>", "group": 1},
+    "detailPic": {"pattern": "<div class=\"bimg\"><img[^>]*src=\"([^\"]+)\"", "group": 1},
+    "detailAuthor": {"pattern": "作者：([^<]+)</p>", "group": 1},
+    "detailAnnouncer": {"pattern": "播音：<a[^>]*>([^<]+)</a>", "group": 1},
+    "detailDesc": {"pattern": "<meta name=\"description\" content=\"([^\"]*)\"", "group": 1},
+    "chapterParse": {
+      "item": {"pattern": "<a[^>]*href=\"/book/{bookId}-(\\d+)\"[^>]*>([^<]+)</a>", "group": 1},
+      "bookId": {"pattern": "<a[^>]*href=\"/book/{bookId}-(\\d+)\"[^>]*>[^<]+</a>", "group": 1},
+      "title": {"pattern": "<a[^>]*href=\"/book/{bookId}-\\d+\"[^>]*>([^<]+)</a>", "group": 2}
+    },
+    "audioExtractor": "meta_api",
+    "audioConfig": {
+      "playPath": "/book/{bookId}-{cid}",
+      "apiPath": "/nlinka",
+      "metaToken": "_c",
+      "metaBookId": "_b",
+      "metaIsPay": "_p",
+      "metaL": "_l",
+      "headerToken": "xt",
+      "headerL": "l",
+      "maxRetry": 3,
+      "retryDelayMs": 1200
+    }
+  }
+]
