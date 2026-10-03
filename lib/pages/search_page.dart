@@ -37,6 +37,7 @@ class _SearchPageState extends State<SearchPage> {
   int _total = 0;
   static const int _pageSize = 20;
   bool _hasSearched = false;
+  bool _aggregate = false;
 
   final _scrollController = ScrollController();
   bool _showTopButton = false;
@@ -89,7 +90,6 @@ class _SearchPageState extends State<SearchPage> {
     final kw = _controller.text.trim();
     if (kw.isEmpty) return;
     FocusScope.of(context).unfocus();
-    // 命中历史/热门时也会走这里，统一记录搜索历史
     context.read<SearchHistoryStore>().add(kw);
     setState(() {
       _loading = true;
@@ -100,6 +100,10 @@ class _SearchPageState extends State<SearchPage> {
       _noMore = false;
       _hasSearched = true;
     });
+    if (_aggregate) {
+      await _searchAggregate(kw);
+      return;
+    }
     try {
       final source = SourceManager.instance.current;
       final list = await source.search(
@@ -123,8 +127,49 @@ class _SearchPageState extends State<SearchPage> {
     }
   }
 
+  Future<void> _searchAggregate(String kw) async {
+    final sources = SourceManager.instance.enabled;
+    final futures = sources.map((s) async {
+      try {
+        return await s.search(kw, page: 1, pageSize: _pageSize);
+      } catch (_) {
+        return <Book>[];
+      }
+    });
+    final results = await Future.wait(futures);
+    if (!mounted) return;
+    final merged = <Book>[];
+    for (final list in results) {
+      merged.addAll(list);
+    }
+    final kwLower = kw.toLowerCase();
+    merged.sort((a, b) {
+      final aHit = a.title.toLowerCase().contains(kwLower) ? 0 : 1;
+      final bHit = b.title.toLowerCase().contains(kwLower) ? 0 : 1;
+      return aHit.compareTo(bHit);
+    });
+    setState(() {
+      _results = merged;
+      _loading = false;
+      _noMore = true;
+    });
+    AppAnalytics.onEvent('search_aggregate', {
+      'sources': sources.length,
+      'results': merged.length,
+    });
+  }
+
+  String _sourceLabel(String sourceId) {
+    try {
+      return SourceManager.instance.get(sourceId).name;
+    } catch (_) {
+      return '';
+    }
+  }
+
   /// 上拉分页：加载下一页并追加到列表尾部
   Future<void> _loadMore() async {
+    if (_aggregate) return;
     final kw = _controller.text.trim();
     if (kw.isEmpty || _loading || _loadingMore) return;
     if (_total > 0 && _results.length >= _total) return;
@@ -193,6 +238,17 @@ class _SearchPageState extends State<SearchPage> {
         title: const Text('搜索'),
         titleSpacing: 0,
         actions: [
+          IconButton(
+            tooltip: _aggregate ? '聚合搜索开' : '聚合搜索关',
+            onPressed: () {
+              setState(() => _aggregate = !_aggregate);
+              if (_controller.text.trim().isNotEmpty) _search();
+            },
+            icon: Icon(
+              _aggregate ? Icons.hub_rounded : Icons.hub_outlined,
+              color: _aggregate ? AppTheme.accent : AppTheme.textSub,
+            ),
+          ),
           IconButton(
             tooltip: '回到发现页',
             onPressed: () => Navigator.of(context).maybePop(),
@@ -304,9 +360,11 @@ class _SearchPageState extends State<SearchPage> {
         if (i == 0) return _buildResultsHeader();
         if (i == _results.length + 1) return _buildFooter();
         final b = _results[i - 1];
+        final srcLabel = _aggregate ? _sourceLabel(b.sourceId) : '';
         return BookListTile(
           book: b,
           subtitle: [
+            if (srcLabel.isNotEmpty) srcLabel,
             if (b.pages > 1) '${b.pages} 章',
             if (b.durationText.isNotEmpty) b.durationText,
             '${Fmt.count(b.play)} 播放',

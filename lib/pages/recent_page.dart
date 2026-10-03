@@ -16,7 +16,7 @@ class RecentPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shelf = context.watch<ShelfStore>();
-    final items = shelf.books.where((b) => b.positionMs > 0).toList();
+    final items = shelf.books.where((b) => b.positionMs > 0).take(50).toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('最近收听')),
