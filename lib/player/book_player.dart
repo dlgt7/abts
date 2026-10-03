@@ -309,10 +309,12 @@ class BookPlayer extends ChangeNotifier {
       for (var i = 0; i < candidates.length; i++) {
         final url = candidates[i];
         try {
+          debugPrint('[BookPlayer] open url=$url headers=${_streamHeaders()} play=${resumeMs <= 0}');
           // 有续播位置时先打开再精确跳转，保证落点准确到秒
           await _player.open(Media(url, httpHeaders: _streamHeaders()),
               play: resumeMs <= 0);
           if (seq != _loadSeq) return false;
+          debugPrint('[BookPlayer] open done playing=${_player.state.playing} duration=${_player.state.duration} buffering=${_player.state.buffering}');
           if (resumeMs > 0) {
             await _seekToResume(resumeMs);
             if (seq != _loadSeq) return false;
@@ -412,6 +414,14 @@ class BookPlayer extends ChangeNotifier {
         'Referer': 'https://www.psmp3.com/',
       };
     }
+    if (sid == 'malaxiu') {
+      return const {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 '
+            'Mobile Safari/537.36',
+        'Referer': 'https://www.malaxiu.com/',
+      };
+    }
     return const {
       'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) '
           'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 '
@@ -436,7 +446,7 @@ class BookPlayer extends ChangeNotifier {
     }
     final source = _sources.get(book.sourceId);
     final urls = await source.audioUrls(book.sourceBookId, cid);
-    debugPrint('[BookPlayer] ${source.name} 拿到 ${urls.length} 条音频');
+    debugPrint('[BookPlayer] ${source.name} cid=$cid 拿到 ${urls.length} 条音频: $urls');
 
     final uniq = urls.where((u) => u.isNotEmpty).toSet().toList();
     if (uniq.isNotEmpty) {
