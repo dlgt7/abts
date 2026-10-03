@@ -422,6 +422,23 @@ class BookPlayer extends ChangeNotifier {
         'Referer': 'https://www.malaxiu.com/',
       };
     }
+
+    // 自定义/本地源：用源站地址作为 Referer，降低 CDN 403 概率
+    final book = _book;
+    if (book != null) {
+      try {
+        final source = _sources.get(book.sourceId);
+        final base = source.baseUrl;
+        if (base != null && base.isNotEmpty) {
+          return {
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) '
+                'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 '
+                'Mobile Safari/537.36',
+            'Referer': base,
+          };
+        }
+      } catch (_) {}
+    }
     return const {
       'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) '
           'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 '
