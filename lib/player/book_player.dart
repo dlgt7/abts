@@ -102,6 +102,7 @@ class BookPlayer extends ChangeNotifier {
   void setup() {
     if (_ready) return;
     _ready = true;
+    unawaited(_player.setProperty('demuxer-lavf-o', 'verify=0'));
     _player.stream.completed.listen((_) async {
       // media_kit 在 open() 换源时可能抛出一次伪 completed，
       // 用「加载中」与「位置未到结尾」两道判断过滤，避免乱跳章节
