@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:provider/provider.dart';
@@ -164,24 +167,53 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    icon: const Icon(Icons.bolt_rounded, size: 18),
-                    label: const Text('加载内置示例 (ting55)'),
-                    onPressed: () async {
-                      try {
-                        final text = await rootBundle
-                            .loadString('assets/sources/ting55.json');
-                        controller.text = text;
-                      } catch (e) {
-                        if (!ctx.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('加载示例失败: $e')),
-                        );
-                      }
-                    },
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.bolt_rounded, size: 18),
+                        label: const Text('内置示例 (ting55)',
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 13)),
+                        onPressed: () async {
+                          try {
+                            final text = await rootBundle
+                                .loadString('assets/sources/ting55.json');
+                            controller.text = text;
+                          } catch (e) {
+                            if (!ctx.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('加载示例失败: $e')),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                    Expanded(
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.folder_open_rounded, size: 18),
+                        label: const Text('从文件导入',
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 13)),
+                        onPressed: () async {
+                          final result = await FilePicker.platform.pickFiles(
+                            type: FileType.custom,
+                            allowedExtensions: ['json'],
+                            withData: true,
+                          );
+                          final bytes = result?.files.single.bytes;
+                          if (bytes == null || !ctx.mounted) return;
+                          try {
+                            controller.text = utf8.decode(bytes);
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('读取文件失败: $e')),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 TextField(
