@@ -4,6 +4,7 @@
     "name": "恋听网",
     "description": "ting55.com 免费有声小说（本地源）",
     "baseUrl": "https://ting55.com",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "categories": [
       {"id": "1", "label": "玄幻"},
       {"id": "2", "label": "武侠"},
