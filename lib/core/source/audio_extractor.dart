@@ -2,6 +2,27 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 
+String normalizeAudioUrl(String u) {
+  if (u.isEmpty) return u;
+  try {
+    if (Uri.decodeComponent(u) != u) return u;
+  } catch (_) {}
+  try {
+    final old = Uri.parse(u);
+    return Uri(
+      scheme: old.scheme,
+      userInfo: old.userInfo,
+      host: old.host,
+      port: old.port,
+      path: old.path,
+      query: old.query,
+      fragment: old.fragment,
+    ).toString();
+  } catch (_) {
+    return u;
+  }
+}
+
 class AudioContext {
   final Dio dio;
   final String baseUrl;
@@ -122,7 +143,7 @@ class MetaApiAudioExtractor implements AudioExtractor {
       if (url.isEmpty) {
         throw Exception('未找到音频地址');
       }
-      return [url];
+      return [normalizeAudioUrl(url)];
     }
     throw Exception('切集限流，请稍后重试');
   }
@@ -159,7 +180,7 @@ class StaticUrlAudioExtractor implements AudioExtractor {
       final m = p.firstMatch(html);
       if (m != null) {
         final url = m.group(1)!.trim();
-        if (url.isNotEmpty) return [url];
+        if (url.isNotEmpty) return [normalizeAudioUrl(url)];
       }
     }
     throw Exception('未找到音频地址');

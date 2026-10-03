@@ -43,6 +43,19 @@ class SourceManager {
   List<BookSource> get enabled =>
       _enabledIds.map((id) => _sources[id]).whereType<BookSource>().toList();
 
+  BookSource? findByUrl(String url) {
+    if (url.isEmpty) return null;
+    final lower = url.toLowerCase();
+    BookSource? fallback;
+    for (final s in enabled) {
+      final b = s.baseUrl;
+      if (b == null || b.isEmpty) continue;
+      if (lower.startsWith(b.toLowerCase())) return s;
+      fallback ??= s;
+    }
+    return fallback;
+  }
+
   bool isEnabled(String id) => _enabledIds.contains(id);
 
   Future<void> load() async {

@@ -92,6 +92,7 @@ class LocalSourceConfig {
   final List<SourceCategoryConfig> categories;
   final String searchPath;
   final String categoryPath;
+  final String? categoryPagePath;
   final String detailPath;
   final ListParseConfig listParse;
   final RegexFieldConfig? detailTitle;
@@ -111,6 +112,7 @@ class LocalSourceConfig {
     required this.categories,
     required this.searchPath,
     required this.categoryPath,
+    this.categoryPagePath,
     required this.detailPath,
     required this.listParse,
     this.detailTitle,
@@ -131,6 +133,7 @@ class LocalSourceConfig {
         'categories': categories.map((c) => c.toJson()).toList(),
         'searchPath': searchPath,
         'categoryPath': categoryPath,
+        if (categoryPagePath != null) 'categoryPagePath': categoryPagePath,
         'detailPath': detailPath,
         'listParse': listParse.toJson(),
         if (detailTitle != null) 'detailTitle': detailTitle!.toJson(),
@@ -162,7 +165,8 @@ class LocalSourceConfig {
       baseUrl: m['baseUrl']?.toString() ?? '',
       categories: cats,
       searchPath: m['searchPath']?.toString() ?? '/search/{kw}',
-      categoryPath: m['categoryPath']?.toString() ?? '/category/{catId}/{page}',
+      categoryPath: m['categoryPath']?.toString() ?? '/category/{catId}',
+      categoryPagePath: m['categoryPagePath']?.toString(),
       detailPath: m['detailPath']?.toString() ?? '/book/{bookId}',
       listParse: ListParseConfig.fromJson(
           (m['listParse'] as Map).cast<String, dynamic>()),

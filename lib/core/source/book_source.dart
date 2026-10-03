@@ -10,6 +10,7 @@ abstract class BookSource {
   String get id;
   String get name;
   String get description;
+  String? get baseUrl => null;
 
   Future<List<Book>> search(String keyword, {int page = 1, int pageSize = 20});
   Future<Book> detail(String sourceBookId);
