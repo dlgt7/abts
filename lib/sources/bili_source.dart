@@ -13,6 +13,9 @@ class BiliSource implements BookSource {
   @override
   String get description => '哔哩哔哩有声小说';
 
+  @override
+  String? get baseUrl => null;
+
   final _api = BiliApi.instance;
 
   @override
