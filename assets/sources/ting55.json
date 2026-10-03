@@ -21,15 +21,16 @@
       {"id": "13", "label": "百家讲坛"}
     ],
     "searchPath": "/search/{kw}",
-    "categoryPath": "/category/{catId}/{page}",
+    "categoryPath": "/category/{catId}",
+    "categoryPagePath": "/category/{catId}/page/{page}",
     "detailPath": "/book/{bookId}",
     "listParse": {
-      "item": {"pattern": "<a[^>]*href=\"/book/(\\d+)\"[^>]*title=\"([^\"]*)\"", "group": 1},
+      "item": {"pattern": "<div class=\"img\"><a[^>]*href=\"/book/(\\d+)\"[^>]*title=\"([^\"]*)\"", "group": 1},
       "bookId": {"pattern": "<a[^>]*href=\"/book/(\\d+)\"[^>]*title=\"[^\"]*\"", "group": 1},
       "title": {"pattern": "<a[^>]*href=\"/book/\\d+\"[^>]*title=\"([^\"]*)\"", "group": 2},
       "pic": {"pattern": "<img[^>]*src=\"([^\"]+)\"", "group": 1},
       "author": {"pattern": "作者：([^<]+)", "group": 1},
-      "announcer": {"pattern": "class=\"by\">([^<]+)</a>", "group": 1}
+      "announcer": {"pattern": "播音：([^<]+)", "group": 1}
     },
     "detailTitle": {"pattern": "<h1>(.*?)</h1>", "group": 1},
     "detailPic": {"pattern": "<div class=\"bimg\"><img[^>]*src=\"([^\"]+)\"", "group": 1},
