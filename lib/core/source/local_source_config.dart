@@ -90,6 +90,7 @@ class LocalSourceConfig {
   final String description;
   final String baseUrl;
   final String? userAgent;
+  final String? charset;
   final List<SourceCategoryConfig> categories;
   final String searchPath;
   final String categoryPath;
@@ -111,6 +112,7 @@ class LocalSourceConfig {
     required this.description,
     required this.baseUrl,
     this.userAgent,
+    this.charset,
     required this.categories,
     required this.searchPath,
     required this.categoryPath,
@@ -133,6 +135,7 @@ class LocalSourceConfig {
         'description': description,
         'baseUrl': baseUrl,
         if (userAgent != null) 'userAgent': userAgent,
+        if (charset != null) 'charset': charset,
         'categories': categories.map((c) => c.toJson()).toList(),
         'searchPath': searchPath,
         'categoryPath': categoryPath,
@@ -167,6 +170,7 @@ class LocalSourceConfig {
       description: m['description']?.toString() ?? '',
       baseUrl: m['baseUrl']?.toString() ?? '',
       userAgent: m['userAgent']?.toString(),
+      charset: m['charset']?.toString(),
       categories: cats,
       searchPath: m['searchPath']?.toString() ?? '/search/{kw}',
       categoryPath: m['categoryPath']?.toString() ?? '/category/{catId}',

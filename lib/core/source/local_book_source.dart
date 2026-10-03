@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
+import 'package:fast_gbk/fast_gbk.dart';
 
 import '../../core/network/http_factory.dart';
 import '../../models/book.dart';
@@ -51,13 +54,51 @@ class LocalBookSource implements BookSource {
     return config.baseUrl + path;
   }
 
+  bool get _isGbk {
+    final cs = (config.charset ?? 'utf8').toLowerCase();
+    return cs == 'gbk' || cs == 'gb2312' || cs == 'gb18030';
+  }
+
+  Future<String> _fetchText(String url, {String? referer}) async {
+    final res = await _dio.get(
+      url,
+      options: Options(
+        responseType: ResponseType.bytes,
+        headers: _headers(referer: referer ?? config.baseUrl),
+      ),
+    );
+    final data = res.data;
+    if (data is List<int>) {
+      return _isGbk
+          ? GbkCodec(allowMalformed: true).decode(data)
+          : utf8.decode(data, allowMalformed: true);
+    }
+    return data.toString();
+  }
+
+  String _encodeKw(String kw) {
+    if (_isGbk) {
+      return GbkCodec()
+          .encode(kw)
+          .map((b) => '%${b.toRadixString(16).toUpperCase().padLeft(2, '0')}')
+          .join();
+    }
+    return Uri.encodeComponent(kw);
+  }
+
+  String _picUrl(String pic) {
+    final p = Book.normalizePic(pic);
+    if (p.isEmpty || p.startsWith('http')) return p;
+    return config.baseUrl + (p.startsWith('/') ? p : '/$p');
+  }
+
   Book _bookFromMatch(String bookId, String title, String pic, String author,
       String announcer) {
     return Book(
       bvid: '${config.id}:$bookId',
       aid: 0,
       title: title,
-      pic: pic.isEmpty ? '' : Book.normalizePic(pic),
+      pic: _picUrl(pic),
       author: author,
       upName: announcer,
       sourceId: config.id,
@@ -96,14 +137,11 @@ class LocalBookSource implements BookSource {
     final kw = keyword.trim();
     if (kw.isEmpty) return [];
     final path = _fill(config.searchPath, {
-      'kw': Uri.encodeComponent(kw),
+      'kw': _encodeKw(kw),
       'page': '$page',
     });
-    final res = await _dio.get(
-      _fullUrl(path),
-      options: Options(headers: _headers(referer: config.baseUrl)),
-    );
-    return _parseList(res.data.toString());
+    final res = await _fetchText(_fullUrl(path));
+    return _parseList(res);
   }
 
   @override
@@ -115,11 +153,8 @@ class LocalBookSource implements BookSource {
       'catId': catId,
       'page': '$page',
     });
-    final res = await _dio.get(
-      _fullUrl(path),
-      options: Options(headers: _headers(referer: config.baseUrl)),
-    );
-    return _parseList(res.data.toString());
+    final res = await _fetchText(_fullUrl(path));
+    return _parseList(res);
   }
 
   @override
@@ -134,11 +169,7 @@ class LocalBookSource implements BookSource {
   Future<Book> detail(String sourceBookId) async {
     final path = _fill(config.detailPath, {'bookId': sourceBookId});
     final url = _fullUrl(path);
-    final res = await _dio.get(
-      url,
-      options: Options(headers: _headers(referer: config.baseUrl)),
-    );
-    final html = res.data.toString();
+    final html = await _fetchText(url);
 
     final title = _subMatch(html, config.detailTitle);
     final pic = _subMatch(html, config.detailPic);
@@ -161,7 +192,7 @@ class LocalBookSource implements BookSource {
       bvid: '${config.id}:$sourceBookId',
       aid: 0,
       title: title.isEmpty ? sourceBookId : title,
-      pic: pic.isEmpty ? '' : Book.normalizePic(pic),
+      pic: _picUrl(pic),
       author: author,
       upName: announcer,
       desc: desc,

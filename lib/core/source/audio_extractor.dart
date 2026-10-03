@@ -82,8 +82,14 @@ class MetaApiAudioExtractor implements AudioExtractor {
             .replaceAll('{bookId}', bookId)
             .replaceAll('{cid}', '$cid');
 
+    final skipMeta = cfg['skipMeta'] == true;
     final apiPath = cfg['apiPath'] as String? ?? '/nlinka';
-    final apiUrl = base + apiPath;
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final apiUrl = base +
+        apiPath
+            .replaceAll('{bookId}', bookId)
+            .replaceAll('{cid}', '$cid')
+            .replaceAll('{ts}', '$ts');
 
     final metaToken = cfg['metaToken'] as String? ?? '_c';
     final metaBookId = cfg['metaBookId'] as String? ?? '_b';
@@ -91,6 +97,7 @@ class MetaApiAudioExtractor implements AudioExtractor {
     final metaL = cfg['metaL'] as String? ?? '_l';
     final headerToken = cfg['headerToken'] as String? ?? 'xt';
     final headerL = cfg['headerL'] as String? ?? 'l';
+    final jsonUrlField = cfg['jsonUrlField'] as String? ?? 'ourl';
     final maxRetry = (cfg['maxRetry'] as num?)?.toInt() ?? 3;
     final retryDelayMs = (cfg['retryDelayMs'] as num?)?.toInt() ?? 1200;
 
@@ -98,24 +105,30 @@ class MetaApiAudioExtractor implements AudioExtractor {
       if (attempt > 0) {
         await Future<void>.delayed(Duration(milliseconds: retryDelayMs));
       }
-      final res = await dio.get(
-        playUrl,
-        options: Options(
-          headers: {
-            ...extraHeaders,
-            'Referer': playUrl,
-          },
-        ),
-      );
-      final html = res.data.toString();
+      String token = '';
+      String b = bookId;
+      String p = '0';
+      String l = '1';
+      if (!skipMeta) {
+        final res = await dio.get(
+          playUrl,
+          options: Options(
+            headers: {
+              ...extraHeaders,
+              'Referer': playUrl,
+            },
+          ),
+        );
+        final html = res.data.toString();
 
-      String? meta(String name) =>
-          RegExp('<meta name="$name" content="([^"]*)"').firstMatch(html)?.group(1);
+        String? meta(String name) =>
+            RegExp('<meta name="$name" content="([^"]*)"').firstMatch(html)?.group(1);
 
-      final token = meta(metaToken) ?? '';
-      final b = meta(metaBookId) ?? bookId;
-      final p = meta(metaIsPay) ?? '0';
-      final l = meta(metaL) ?? '1';
+        token = meta(metaToken) ?? '';
+        b = meta(metaBookId) ?? bookId;
+        p = meta(metaIsPay) ?? '0';
+        l = meta(metaL) ?? '1';
+      }
 
       final apiRes = await dio.post(
         apiUrl,
@@ -125,8 +138,8 @@ class MetaApiAudioExtractor implements AudioExtractor {
             ...extraHeaders,
             'Referer': playUrl,
             'Content-Type': 'application/x-www-form-urlencoded',
-            headerToken: token,
-            headerL: l,
+            if (token.isNotEmpty) headerToken: token,
+            if (l.isNotEmpty) headerL: l,
           },
         ),
       );
@@ -138,12 +151,19 @@ class MetaApiAudioExtractor implements AudioExtractor {
       if (status == -1 || status == 0) {
         throw Exception('音频不可用（状态 $status）');
       }
-      final ourl = json['ourl']?.toString() ?? '';
-      final url = ourl.isNotEmpty ? ourl : (json['url']?.toString() ?? '');
+      String url = '';
+      for (final f in jsonUrlField.split(',')) {
+        final v = json[f.trim()]?.toString() ?? '';
+        if (v.isNotEmpty) {
+          url = v;
+          break;
+        }
+      }
+      if (url.isEmpty) url = json['url']?.toString() ?? '';
       if (url.isEmpty) {
         throw Exception('未找到音频地址');
       }
-      return [normalizeAudioUrl(url)];
+      return [normalizeAudioUrl(url.replaceAll('.flv', '.mp3'))];
     }
     throw Exception('切集限流，请稍后重试');
   }
