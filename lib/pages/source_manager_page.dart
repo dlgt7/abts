@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:provider/provider.dart';
 
 import '../core/source/source_store.dart';
 import '../core/theme/app_theme.dart';
 
-class SourceManagerPage extends StatelessWidget {
+class SourceManagerPage extends StatefulWidget {
   const SourceManagerPage({super.key});
 
+  @override
+  State<SourceManagerPage> createState() => _SourceManagerPageState();
+}
+
+class _SourceManagerPageState extends State<SourceManagerPage> {
   @override
   Widget build(BuildContext context) {
     final store = context.watch<SourceStore>();
@@ -14,7 +20,16 @@ class SourceManagerPage extends StatelessWidget {
     final currentId = store.currentId;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('书源管理')),
+      appBar: AppBar(
+        title: const Text('书源管理'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add_circle_outline_rounded),
+            tooltip: '导入本地源',
+            onPressed: () => _showImportDialog(context),
+          ),
+        ],
+      ),
       body: ListView.builder(
         padding: const EdgeInsets.symmetric(vertical: 8),
         itemCount: sources.length,
@@ -23,6 +38,7 @@ class SourceManagerPage extends StatelessWidget {
           final isCurrent = source.id == currentId;
           final isEnabled = store.isEnabled(source.id);
           final isBili = source.id == 'bili';
+          final isCustom = store.isCustom(source.id);
 
           return Container(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -40,18 +56,44 @@ class SourceManagerPage extends StatelessWidget {
               leading: Icon(
                 isBili
                     ? Icons.play_circle_rounded
-                    : Icons.headphones_rounded,
+                    : (isCustom
+                        ? Icons.extension_rounded
+                        : Icons.headphones_rounded),
                 size: 28,
                 color: isCurrent ? AppTheme.accent : AppTheme.textSub,
               ),
-              title: Text(
-                source.name,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight:
-                      isCurrent ? FontWeight.w700 : FontWeight.w500,
-                  color: AppTheme.textMain,
-                ),
+              title: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      source.name,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight:
+                            isCurrent ? FontWeight.w700 : FontWeight.w500,
+                        color: AppTheme.textMain,
+                      ),
+                    ),
+                  ),
+                  if (isCustom)
+                    Container(
+                      margin: const EdgeInsets.only(left: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.toneCyan.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '本地',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: AppTheme.toneCyan,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
               ),
               subtitle: Text(
                 source.description,
@@ -91,6 +133,13 @@ class SourceManagerPage extends StatelessWidget {
                       onChanged: (v) => store.setEnabled(source.id, v),
                       activeThumbColor: AppTheme.accent,
                     ),
+                  if (isCustom)
+                    IconButton(
+                      icon: Icon(Icons.delete_outline_rounded,
+                          size: 20, color: AppTheme.textSub),
+                      tooltip: '删除本地源',
+                      onPressed: () => _confirmRemove(context, source.id, source.name),
+                    ),
                 ],
               ),
               onTap: isCurrent || !isEnabled
@@ -99,6 +148,104 @@ class SourceManagerPage extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+
+  void _showImportDialog(BuildContext context) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('导入本地源'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.bolt_rounded, size: 18),
+                    label: const Text('加载内置示例 (ting55)'),
+                    onPressed: () async {
+                      try {
+                        final text = await rootBundle
+                            .loadString('assets/sources/ting55.json');
+                        controller.text = text;
+                      } catch (e) {
+                        if (!ctx.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('加载示例失败: $e')),
+                        );
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: controller,
+                  maxLines: 12,
+                  minLines: 6,
+                  decoration: const InputDecoration(
+                    hintText: '粘贴书源 JSON 配置\n（单个对象或数组）',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final text = controller.text.trim();
+                if (text.isEmpty) return;
+                final wrapped = text.startsWith('[') ? text : '[$text]';
+                final ok = await context.read<SourceStore>().importFromJsonString(wrapped);
+                if (!ctx.mounted) return;
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(ok ? '导入成功' : '导入失败（ID 为空或已存在）'),
+                  ),
+                );
+              },
+              child: const Text('导入'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _confirmRemove(BuildContext context, String id, String name) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除本地源'),
+        content: Text('确定删除「$name」？该源将从列表移除。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.red.shade400,
+            ),
+            onPressed: () async {
+              await context.read<SourceStore>().removeCustom(id);
+              if (!ctx.mounted) return;
+              Navigator.pop(ctx);
+            },
+            child: const Text('删除'),
+          ),
+        ],
       ),
     );
   }
