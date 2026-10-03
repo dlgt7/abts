@@ -12,10 +12,20 @@ class SourceManager {
 
   static const _prefCurrent = 'abts_current_source';
   static const _prefEnabled = 'abts_enabled_sources';
+  static const _prefCustom = 'abts_custom_sources';
 
   void register(BookSource source) {
     _sources[source.id] = source;
   }
+
+  void unregister(String id) {
+    if (id == 'bili') return;
+    _sources.remove(id);
+    _enabledIds.remove(id);
+    if (_currentId == id) _currentId = 'bili';
+  }
+
+  bool get isCurrentCustom => _currentId != 'bili' && !const ['ting15', 'psmp3', 'tingyou'].contains(_currentId);
 
   BookSource get(String id) {
     final s = _sources[id];
@@ -70,5 +80,15 @@ class SourceManager {
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_prefEnabled, _enabledIds);
+  }
+
+  Future<String> loadCustomConfigsJson() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_prefCustom) ?? '[]';
+  }
+
+  Future<void> saveCustomConfigsJson(String json) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefCustom, json);
   }
 }
