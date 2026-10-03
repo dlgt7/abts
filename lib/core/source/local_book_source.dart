@@ -30,13 +30,13 @@ class LocalBookSource implements BookSource {
       .toList();
 
   static const _ua =
-      'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 '
-      '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+      '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-  late final Dio _dio = createDio(userAgent: _ua);
+  late final Dio _dio = createDio(userAgent: config.userAgent ?? _ua);
 
   Map<String, String> _headers({String referer = ''}) => {
-        'User-Agent': _ua,
+        'User-Agent': config.userAgent ?? _ua,
         if (referer.isNotEmpty) 'Referer': referer,
       };
 
