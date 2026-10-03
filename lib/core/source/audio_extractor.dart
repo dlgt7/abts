@@ -16,7 +16,12 @@ String normalizeAudioUrl(String u) {
   if (idx > 0) {
     final scheme = u.substring(0, idx);
     final rest = u.substring(idx + 3);
-    return '$scheme://${Uri.encodeFull(rest)}';
+    final encoded = Uri.encodeFull(rest)
+        .replaceAll('(', '%28')
+        .replaceAll(')', '%29')
+        .replaceAll('[', '%5B')
+        .replaceAll(']', '%5D');
+    return '$scheme://$encoded';
   }
   return Uri.encodeFull(u);
 }
