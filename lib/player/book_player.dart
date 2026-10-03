@@ -15,6 +15,25 @@ import '../models/chapter.dart';
 import '../services/audio_focus.dart';
 import '../services/umeng_analytics.dart';
 
+sealed class PlaybackStatus {}
+
+class PlaybackIdle extends PlaybackStatus {}
+
+class PlaybackLoading extends PlaybackStatus {}
+
+class PlaybackBuffering extends PlaybackStatus {}
+
+class PlaybackPlaying extends PlaybackStatus {}
+
+class PlaybackPaused extends PlaybackStatus {}
+
+class PlaybackCompleted extends PlaybackStatus {}
+
+class PlaybackError extends PlaybackStatus {
+  final String message;
+  PlaybackError(this.message);
+}
+
 /// 听书播放器：按"章节"连播 + 断点续播 + 睡眠定时 + 系统媒体会话
 class BookPlayer extends ChangeNotifier {
   BookPlayer._();
@@ -464,13 +483,15 @@ class BookPlayer extends ChangeNotifier {
     final pos = currentPosition;
     final dur = currentDuration;
 
-    final processing = _loading || _player.state.buffering
-        ? AudioProcessingState.buffering
-        : _error != null
-            ? AudioProcessingState.error
-            : _loaded
-                ? AudioProcessingState.ready
-                : AudioProcessingState.idle;
+    final processing = switch (playbackStatus) {
+      PlaybackIdle() => AudioProcessingState.idle,
+      PlaybackLoading() => AudioProcessingState.buffering,
+      PlaybackBuffering() => AudioProcessingState.buffering,
+      PlaybackPlaying() => AudioProcessingState.ready,
+      PlaybackPaused() => AudioProcessingState.ready,
+      PlaybackCompleted() => AudioProcessingState.completed,
+      PlaybackError() => AudioProcessingState.error,
+    };
 
     h.playbackState.add(
       PlaybackState(
@@ -608,6 +629,16 @@ class BookPlayer extends ChangeNotifier {
   Duration get currentDuration => _player.state.duration;
   bool get isPlaying => _player.state.playing;
   bool get buffering => _player.state.buffering;
+
+  PlaybackStatus get playbackStatus {
+    if (_error != null) return PlaybackError(_error!);
+    if (!_ready) return PlaybackIdle();
+    if (_loading) return PlaybackLoading();
+    if (_player.state.buffering) return PlaybackBuffering();
+    if (!_loaded) return PlaybackIdle();
+    if (_player.state.playing) return PlaybackPlaying();
+    return PlaybackPaused();
+  }
 
   /// 进度落库（节流，每 ~2 秒持久化一次；取值在落库时刻读取，保证精确）
   Timer? _lastSaveTimer;
