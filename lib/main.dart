@@ -7,8 +7,10 @@ import 'package:media_kit/media_kit.dart';
 import 'package:provider/provider.dart';
 
 import 'core/network/bili_client.dart';
+import 'core/source/audio_extractor.dart';
 import 'core/source/source_manager.dart';
 import 'core/source/source_store.dart';
+import 'core/source/webview_audio_extractor.dart';
 import 'core/storage/search_history_store.dart';
 import 'core/storage/shelf_store.dart';
 import 'core/theme/app_theme.dart';
@@ -45,6 +47,8 @@ Future<void> _bootstrap() async {
     ..register(Psmp3Source())
     ..register(Ting15Source())
     ..register(TingyouSource());
+  AudioExtractorRegistry.instance
+      .register('webview', WebViewAudioExtractor.new);
   try {
     await Future.wait([
       BiliClient.instance.initLocal(),
