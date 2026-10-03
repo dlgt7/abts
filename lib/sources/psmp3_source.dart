@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../core/network/http_factory.dart';
 import '../core/source/book_source.dart';
 import '../models/book.dart';
 import '../models/chapter.dart';
@@ -14,6 +15,9 @@ class Psmp3Source implements BookSource {
   @override
   String get description => 'psmp3.com 评书音频';
 
+  @override
+  String? get baseUrl => _base;
+
   static const _base = 'https://www.psmp3.com';
   static const _sourceId = 'psmp3';
   static const _cacheTtlMs = 30 * 60 * 1000;
@@ -22,11 +26,7 @@ class Psmp3Source implements BookSource {
       'Mozilla/5.0 (Linux; Android 12; Mobile) AppleWebKit/537.36 '
       '(KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36';
 
-  late final Dio _dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 15),
-    receiveTimeout: const Duration(seconds: 30),
-    responseType: ResponseType.plain,
-  ));
+  late final Dio _dio = createDio(userAgent: _ua);
 
   final Map<String, ({List<({String name, String url})> items, int ts})>
       _volumeCache = {};

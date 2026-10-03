@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 
+import '../core/network/http_factory.dart';
 import '../core/source/book_source.dart';
 import '../models/book.dart';
 import '../models/chapter.dart';
@@ -16,6 +17,9 @@ class Ting15Source implements BookSource {
   @override
   String get description => 'ting15.com 免费有声小说';
 
+  @override
+  String? get baseUrl => _base;
+
   static const _base = 'https://www.ting15.com';
   static const _sourceId = 'ting15';
 
@@ -23,11 +27,7 @@ class Ting15Source implements BookSource {
       'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 '
       '(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
 
-  late final Dio _dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 15),
-    receiveTimeout: const Duration(seconds: 30),
-    responseType: ResponseType.plain,
-  ));
+  late final Dio _dio = createDio(userAgent: _ua);
 
   @override
   List<SourceCategory> get categories => const [

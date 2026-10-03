@@ -10,6 +10,7 @@ import 'package:pointycastle/macs/poly1305.dart';
 import 'package:pointycastle/block/aes.dart';
 import 'package:pointycastle/block/modes/gcm.dart';
 
+import '../core/network/http_factory.dart';
 import '../core/source/book_source.dart';
 import '../models/book.dart';
 import '../models/chapter.dart';
@@ -23,6 +24,9 @@ class TingyouSource implements BookSource {
 
   @override
   String get description => 'tingyou.fm 有声书';
+
+  @override
+  String? get baseUrl => _origin;
 
   static const _apiBase = 'https://tingyou.fm/api/';
   static const _referer = 'https://tingyou.fm/';
@@ -41,11 +45,7 @@ class TingyouSource implements BookSource {
   static const _sigma = [0x61707865, 0x3320646e, 0x79622d32, 0x6b206574];
   static const _cacheTtlMs = 30 * 60 * 1000;
 
-  late final Dio _dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 15),
-    receiveTimeout: const Duration(seconds: 30),
-    responseType: ResponseType.plain,
-  ));
+  late final Dio _dio = createDio(userAgent: _ua);
 
   String? _dfp;
   bool _initialized = false;
