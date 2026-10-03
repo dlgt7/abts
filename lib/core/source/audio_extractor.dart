@@ -4,20 +4,21 @@ import 'package:dio/dio.dart';
 
 String normalizeAudioUrl(String u) {
   if (u.isEmpty) return u;
-  try {
-    // 已经规范化/含编码的链接直接复用
-    final uri = Uri.parse(u);
-    return uri.toString();
-  } catch (_) {
-    // 含中文、空格等未编码字符时，只编码路径及之后的内容
-    final idx = u.indexOf('://');
-    if (idx > 0) {
-      final scheme = u.substring(0, idx);
-      final rest = u.substring(idx + 3);
-      return '$scheme://${Uri.encodeFull(rest)}';
+  bool needEncode = false;
+  for (final c in u.runes) {
+    if (c > 0x7F || c == 0x20) {
+      needEncode = true;
+      break;
     }
-    return Uri.encodeFull(u);
   }
+  if (!needEncode) return u;
+  final idx = u.indexOf('://');
+  if (idx > 0) {
+    final scheme = u.substring(0, idx);
+    final rest = u.substring(idx + 3);
+    return '$scheme://${Uri.encodeFull(rest)}';
+  }
+  return Uri.encodeFull(u);
 }
 
 class AudioContext {
@@ -160,6 +161,9 @@ class MetaApiAudioExtractor implements AudioExtractor {
       if (url.isEmpty) {
         throw Exception('未找到音频地址');
       }
+      if (cfg['flvToMp3'] == true && url.contains('.flv')) {
+        url = url.replaceAll('.flv', '.mp3');
+      }
       return [normalizeAudioUrl(url)];
     }
     throw Exception('切集限流，请稍后重试');
@@ -191,19 +195,22 @@ class StaticUrlAudioExtractor implements AudioExtractor {
     final patterns = <RegExp>[
       RegExp(r'<audio[^>]*src="([^"]+)"'),
       RegExp(r'<source[^>]*src="([^"]+)"'),
-      RegExp(r"(https?://[^\\s\"'<>]+\\.(?:mp3|m4a|aac|flv|mp4)[^\\s\"'<>]*)"),
-      RegExp(r"(?:src|url)\s*[:=]\s*[\"']?([^\"'<>\\s]+\\.(?:mp3|m4a|aac|flv|mp4))"),
+      RegExp(r'(https?://[^\s"'\''<>]+\.(?:mp3|m4a|aac|flv|mp4)[^\s"'\''<>]*)'),
+      RegExp(r'(?:src|url)\s*[:=]\s*["'\'']?([^"'\''<>\s]+\.(?:mp3|m4a|aac|flv|mp4))'),
     ];
     for (final p in patterns) {
       final m = p.firstMatch(html);
       if (m != null) {
         final raw = m.group(1)!.trim();
         if (raw.isEmpty) continue;
-        final url = raw.startsWith('http')
+        var url = raw.startsWith('http')
             ? raw
             : raw.startsWith('/')
                 ? '$base$raw'
                 : '$base/$raw';
+        if (cfg['flvToMp3'] == true && url.contains('.flv')) {
+          url = url.replaceAll('.flv', '.mp3');
+        }
         return [normalizeAudioUrl(url)];
       }
     }
