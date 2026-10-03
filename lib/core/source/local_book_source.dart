@@ -108,7 +108,10 @@ class LocalBookSource implements BookSource {
 
   @override
   Future<List<Book>> category(String catId, {int page = 1}) async {
-    final path = _fill(config.categoryPath, {
+    final tpl = page > 1
+        ? (config.categoryPagePath ?? config.categoryPath)
+        : config.categoryPath;
+    final path = _fill(tpl, {
       'catId': catId,
       'page': '$page',
     });
