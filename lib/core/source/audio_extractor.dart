@@ -153,7 +153,7 @@ class StaticUrlAudioExtractor implements AudioExtractor {
     final patterns = <RegExp>[
       RegExp(r'<audio[^>]*src="([^"]+)"'),
       RegExp(r'<source[^>]*src="([^"]+)"'),
-      RegExp(r'(https?://[^\s"\'<>]+\.(?:mp3|m4a|aac)[^\s"\'<>]*)'),
+      RegExp("(https?://[^\\s\"'<>]+\\.(?:mp3|m4a|aac)[^\\s\"'<>]*)"),
     ];
     for (final p in patterns) {
       final m = p.firstMatch(html);
