@@ -166,9 +166,8 @@ class MetaApiAudioExtractor implements AudioExtractor {
       if (url.isEmpty) {
         throw Exception('未找到音频地址');
       }
-      if (cfg['flvToMp3'] == true && url.contains('.flv')) {
-        url = url.replaceAll('.flv', '.mp3');
-      }
+      // 直接使用源站返回的原始地址：media_kit 的 libmpv/FFmpeg
+      // 原生支持 flv / m4a 等音频容器，替换扩展名反而会指向不存在的文件
       return [normalizeAudioUrl(url)];
     }
     throw Exception('切集限流，请稍后重试');
@@ -213,9 +212,6 @@ class StaticUrlAudioExtractor implements AudioExtractor {
             : raw.startsWith('/')
                 ? '$base$raw'
                 : '$base/$raw';
-        if (cfg['flvToMp3'] == true && url.contains('.flv')) {
-          url = url.replaceAll('.flv', '.mp3');
-        }
         return [normalizeAudioUrl(url)];
       }
     }
