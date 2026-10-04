@@ -1,0 +1,64 @@
+[
+  {
+    "id": "pingshu365",
+    "name": "天天评书网",
+    "description": "pingshu365.com 评书有声小说（本地源）",
+    "baseUrl": "https://www.pingshu365.com",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "charset": "gb2312",
+    "categories": [
+      {"id": "293", "label": "单田芳"},
+      {"id": "294", "label": "袁阔成"},
+      {"id": "295", "label": "田连元"},
+      {"id": "297", "label": "刘兰芳"},
+      {"id": "296", "label": "王玥波"},
+      {"id": "298", "label": "连丽如"},
+      {"id": "299", "label": "张少佐"},
+      {"id": "302", "label": "其他"},
+      {"id": "304", "label": "恐怖悬疑"},
+      {"id": "305", "label": "盗墓探险"},
+      {"id": "307", "label": "官场刑侦"},
+      {"id": "309", "label": "历史军事"},
+      {"id": "315", "label": "科学教育"},
+      {"id": "314", "label": "经典文学"},
+      {"id": "312", "label": "儿童读物"},
+      {"id": "306", "label": "仙侠玄幻"},
+      {"id": "308", "label": "都市言情"},
+      {"id": "310", "label": "传统武侠"},
+      {"id": "311", "label": "职场商战"},
+      {"id": "313", "label": "人物传记"},
+      {"id": "316", "label": "纪实文学"},
+      {"id": "300", "label": "其他类别"},
+      {"id": "317", "label": "百家讲坛"},
+      {"id": "303", "label": "相声"},
+      {"id": "318", "label": "戏曲"}
+    ],
+    "searchPath": "/search/search.asp?keyword={kw}&stype=1",
+    "categoryPath": "/list/{catId}_{page}.html",
+    "detailPath": "/ps/{bookId}.html",
+    "listParse": {
+      "item": {"pattern": "<div class=\"pic\"><a[^>]*href=\"/ps/(\\d+)\\.html\"[\\s\\S]*?<a href=\"/ps/\\d+\\.html\">([^<]+)</a>", "group": 1},
+      "bookId": {"pattern": "<a[^>]*href=\"/ps/(\\d+)\\.html\"", "group": 1},
+      "title": {"pattern": "<a[^>]*href=\"/ps/\\d+\\.html\">([^<]+)</a>", "group": 2},
+      "pic": {"pattern": "src=\"(/pic/[^\"]+)\"", "group": 1}
+    },
+    "detailTitle": {"pattern": "<title>(?:[^<\\s]+\\s+)?([^(<]+\\(\\d+回?\\))\\s*-[^<]*</title>", "group": 1},
+    "detailPic": {"pattern": "<img[^>]*src=\"(/pic/[^\"]+)\"", "group": 1},
+    "detailAuthor": {"pattern": "<title>[^<]*-\\s*([^<]+)</title>", "group": 1},
+    "detailDesc": {"pattern": "<meta name=\"description\" content=\"([^\"]*)\"", "group": 1},
+    "chapterParse": {
+      "item": {"pattern": "<a[^>]*href=\"/play/(\\d+)\\.html\"[^>]*>([^<]+)</a>", "group": 1},
+      "bookId": {"pattern": "<a[^>]*href=\"/play/(\\d+)\\.html\"", "group": 1},
+      "title": {"pattern": "<a[^>]*href=\"/play/\\d+\\.html\"[^>]*>([^<]+)</a>", "group": 2}
+    },
+    "audioExtractor": "meta_api",
+    "audioConfig": {
+      "playPath": "/play/{cid}.html",
+      "apiPath": "/path365_{cid}.html{ts}",
+      "jsonUrlField": "urlpath",
+      "skipMeta": true,
+      "maxRetry": 1,
+      "retryDelayMs": 500
+    }
+  }
+]
