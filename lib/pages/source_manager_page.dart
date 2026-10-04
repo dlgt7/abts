@@ -85,11 +85,11 @@ class _SourceManagerPageState extends State<SourceManagerPage> {
                   children: [
                     _ImportActionButton(
                       icon: Icons.bolt_rounded,
-                      label: '内置示例 (ting55)',
+                      label: '内置示例 (pingshu365)',
                       onPressed: () async {
                         try {
                           final text = await rootBundle
-                              .loadString('assets/sources/ting55.json');
+                              .loadString('assets/sources/pingshu365.json');
                           controller.text = text;
                         } catch (e) {
                           if (!ctx.mounted) return;
